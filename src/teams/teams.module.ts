@@ -5,9 +5,13 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { TeamSchema } from './schema/teams.schema';
 import { TeamsService } from './teams.service';
 import { TeamsController } from './teams.controller';
+import { AuthModule } from 'src/auth/auth.module';
 
 @Module({
-  imports: [MongooseModule.forFeature([{ name: 'Team', schema: TeamSchema }])],
+  imports: [
+    AuthModule,
+    MongooseModule.forFeature([{ name: 'Team', schema: TeamSchema }]),
+  ],
   providers: [TeamsService],
   controllers: [TeamsController],
 })

@@ -20,4 +20,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     const rolesArray = Array.isArray(payload.roles) ? payload.roles : [payload.roles].filter(Boolean);
     return { userId: payload.sub, username: payload.username ,  roles: rolesArray};
   }
+
+  
 }

@@ -1,5 +1,10 @@
 /* eslint-disable prettier/prettier */
-import { HttpException, HttpStatus, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  HttpException,
+  HttpStatus,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
 import * as bcrypt from 'bcrypt';
@@ -7,9 +12,9 @@ import { UserDocument } from '../users/schema/users.schema';
 
 // Adjusted to reflect your user document and include only the necessary fields
 export type SanitizedUser = {
-  userId: string;  // Assuming '_id' is the MongoDB default identifier
-  username: string;  // Assuming 'email' is used as username
-  role: string[];  // Assuming 'roles' is correct and it's an array
+  userId: string; // Assuming '_id' is the MongoDB default identifier
+  username: string; // Assuming 'email' is used as username
+  role: string[]; // Assuming 'roles' is correct and it's an array
 };
 
 @Injectable()
@@ -19,7 +24,7 @@ export class AuthService {
 
   constructor(
     private readonly usersService: UsersService,
-    private readonly jwtService: JwtService
+    private readonly jwtService: JwtService,
   ) {}
 
   async validateUser(email: string, pass: string): Promise<SanitizedUser> {
@@ -40,7 +45,10 @@ export class AuthService {
   private handleFailedLoginAttempt(email: string): void {
     const attempts = this.loginAttempts.get(email) || 0;
     if (attempts >= this.maxLoginAttempts) {
-      throw new HttpException('Account locked due to too many failed login attempts', HttpStatus.FORBIDDEN);
+      throw new HttpException(
+        'Account locked due to too many failed login attempts',
+        HttpStatus.FORBIDDEN,
+      );
     }
     this.loginAttempts.set(email, attempts + 1);
   }
@@ -51,26 +59,32 @@ export class AuthService {
 
   private sanitizeUser(user: UserDocument): SanitizedUser {
     return {
-      userId: user._id.toString(),  // Convert MongoDB ObjectId to string
-      username: user.email,  // Assuming email is used as username
-      role : [user.role]  // Ensure this is included and correct based on your schema
+      userId: user._id.toString(), // Convert MongoDB ObjectId to string
+      username: user.email, // Assuming email is used as username
+      role: [user.role], // Ensure this is included and correct based on your schema
     };
   }
 
-  private async isPasswordValid(plainTextPassword: string, hashedPassword: string): Promise<boolean> {
+  private async isPasswordValid(
+    plainTextPassword: string,
+    hashedPassword: string,
+  ): Promise<boolean> {
     return bcrypt.compare(plainTextPassword, hashedPassword);
   }
 
-  async login(user: { email: string, password: string }): Promise<{ accessToken: string }> {
+  async login(user: {
+    email: string;
+    password: string;
+  }): Promise<{ accessToken: string }> {
     const validatedUser = await this.validateUser(user.email, user.password);
     if (!validatedUser) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
     const payload = {
-      username: validatedUser.username,  // Typically, username might be used here; adjust as needed
+      username: validatedUser.username,
       sub: validatedUser.userId,
-      role : [validatedUser.role]  // Ensure this is included
+      role: [validatedUser.role], // Ensure this is included
     };
 
     return {
@@ -80,44 +94,39 @@ export class AuthService {
 
   private extractUserIdFromToken(token: string): string | null {
     try {
-      // Decode the payload without verifying the signature
-      const payload = jwt.decode(token) as { sub: string };
+      const payload = this.jwtService.verify(token, {
+        secret: process.env.JWT_SECRET,
+      });
 
       if (payload && payload.sub) {
         return payload.sub;
       }
 
       return null;
-    } catch (error: any) {
-      console.error("Anni git")
-      return null;
-    }
-  }
-  
-  async decodeToken(token: string): Promise<any> {
-       try {
-      
-      const decoded = this.jwtService.verify(token, {
-        secret: process.env.JWT_SECRET,
-      });
-      
-      return decoded;
     } catch (error) {
-      
-      // Automatically attempt to regenerate token if signature is invalid
       if (
         error.name === 'JsonWebTokenError' &&
         error.message === 'invalid signature'
       ) {
-       
-        const userId = this.extractUserIdFromToken(token);
-        if (userId) {
-          const newTokens = await this.regenerateToken(userId);
-         
-          return this.decodeToken(newTokens.access_token);
-        } else {
-          throw new UnauthorizedException('Unable to regenerate token');
-        }
+        return null;
+      } else {
+        throw new UnauthorizedException('Invalid token');
+      }
+    }
+  }
+
+  async decodeToken(token: string): Promise<any> {
+    try {
+      const decoded = this.jwtService.verify(token, {
+        secret: process.env.JWT_SECRET,
+      });
+
+      return decoded;
+    } catch (error) {
+      if (
+        error.name === 'JsonWebTokenError' &&
+        error.message === 'invalid signature'
+      ) {
       } else {
         throw new UnauthorizedException('Invalid token');
       }
