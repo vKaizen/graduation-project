@@ -14,5 +14,6 @@ import { AuthModule } from 'src/auth/auth.module';
   ],
   providers: [TeamsService],
   controllers: [TeamsController],
+  exports: [TeamsService],
 })
 export class TeamsModule {}

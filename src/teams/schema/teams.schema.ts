@@ -14,7 +14,7 @@ export class Team extends Document {
     members: Types.ObjectId[];  // Array of user IDs who are members of the team
 
     @Prop({ type: [{ type: Types.ObjectId, ref: 'User' }], default: [] })
-    leader: Types.ObjectId[];  // Optional array of user IDs who are leaders of the team
+    owner: Types.ObjectId[];  // Optional array of user IDs who are leaders of the team
 
     @Prop()
     privacy?: string;  // Optional privacy setting, e.g., 'public', 'private'

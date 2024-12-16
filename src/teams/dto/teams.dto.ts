@@ -20,7 +20,7 @@ export class CreateTeamDto {
     @IsOptional()
     @IsArray()
     @IsMongoId({ each: true })
-    readonly leader?: Types.ObjectId[];
+    readonly owner?: Types.ObjectId[];
 
     @IsOptional()
     @IsString()

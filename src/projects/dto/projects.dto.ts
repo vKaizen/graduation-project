@@ -1,12 +1,44 @@
 /* eslint-disable prettier/prettier */
-
-import { Types } from "mongoose";
+import { IsString, IsNotEmpty, IsOptional, IsIn } from 'class-validator';
 
 export class CreateProjectDto {
-    readonly name: string;
-    readonly description?: string;
-    readonly status?: string;
-    readonly members?: Types.ObjectId[];
-    readonly team?: Types.ObjectId;
-    readonly customFields?: Map<string, string>;
-  }
+  @IsString()
+  @IsNotEmpty()
+  name: string;
+
+  @IsString()
+  @IsOptional()
+  description?: string;
+
+  @IsString()
+  @IsNotEmpty()
+  ownerId: string;
+
+  @IsString()
+  @IsOptional()
+  @IsIn(['active', 'completed', 'archived'], {
+    message: 'Status must be active, completed, or archived',
+  })
+  status?: string;
+}
+
+export class AddMemberDto {
+  @IsString()
+  @IsNotEmpty()
+  userId: string;
+
+  @IsString()
+  @IsIn(['Owner', 'Member', 'Admin'], {
+    message: 'Role must be one of Owner, Member, or Admin',
+  })
+  role: string;
+}
+
+export class UpdateProjectStatusDto {
+  @IsString()
+  @IsNotEmpty()
+  @IsIn(['active', 'completed', 'archived'], {
+    message: 'Status must be active, completed, or archived',
+  })
+  status: string;
+}

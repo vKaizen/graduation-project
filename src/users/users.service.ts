@@ -6,6 +6,8 @@ import { User } from './schema/users.schema';
 import { CreateUserDto } from './dto/users.dto';
 import * as bcrypt from 'bcrypt';
 
+
+
 @Injectable()
 export class UsersService {
   // Add valid roles as a class property
@@ -27,6 +29,7 @@ export class UsersService {
         ...createUserDto,
         password: hashedPassword
     });
+    
     return newUser.save();
   }
 

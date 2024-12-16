@@ -16,7 +16,7 @@ export class TeamsService {
     const newTeam = new this.teamModel({
       ...createTeamDto,
       userId,
-      leader : [] , // Assigning the user as the leaderS
+      owner : [] , // Assigning the user as the leaderS
       members: [] // Optionally, add the creator as the first member
     });
     return newTeam.save();

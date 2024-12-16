@@ -18,7 +18,7 @@ import { AuthModule } from './auth/auth.module';
     TasksModule,
     TeamsModule,
     CommentsModule,
-    MongooseModule.forRoot('mongodb://localhost:27017/taskmanager'),
+    MongooseModule.forRoot('mongodb+srv://Kaizen:Atwan2003@cluster0.jekh1.mongodb.net/'),
     AuthModule,
     
   ],
