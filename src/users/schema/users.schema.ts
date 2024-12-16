@@ -25,6 +25,10 @@ export class User extends Document {
   @Prop()
   bio: string;  // About me section, providing a personal description or bio
 
+  @Prop({ required: true })
+  password: string;  // Adding password field
+
 }
 
+export type UserDocument = User & Document
 export const UserSchema = SchemaFactory.createForClass(User);

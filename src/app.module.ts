@@ -7,6 +7,8 @@ import { ProjectsModule } from './projects/projects.module';
 import { TasksModule } from './tasks/tasks.module';
 import { TeamsModule } from './teams/teams.module';
 import { CommentsModule } from './comments/comments.module';
+import { AuthModule } from './auth/auth.module';
+
 
 
 @Module({
@@ -17,6 +19,8 @@ import { CommentsModule } from './comments/comments.module';
     TeamsModule,
     CommentsModule,
     MongooseModule.forRoot('mongodb://localhost:27017/taskmanager'),
+    AuthModule,
+    
   ],
   controllers: [AppController],
   providers: [],

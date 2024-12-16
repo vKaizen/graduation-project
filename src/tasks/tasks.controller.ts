@@ -10,7 +10,7 @@ import { Task } from './schema/tasks.schema';
 export class TasksController {
   constructor(private tasksService: TasksService) {}
 
-  @Post()
+  @Post('register')
   async createTask(@Body() createTaskDto: CreateTaskDto): Promise<Task> {
     return this.tasksService.createTask(createTaskDto);
   }

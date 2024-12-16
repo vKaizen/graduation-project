@@ -10,7 +10,7 @@ import { Project } from './schema/projects.schema';
 export class ProjectsController {
   constructor(private projectsService: ProjectsService) {}
 
-  @Post()
+  @Post('create')
   async createProject(@Body() createProjectDto: CreateProjectDto): Promise<Project> {
     return this.projectsService.createProject(createProjectDto);
   }
