@@ -15,15 +15,15 @@ export class TasksController {
     return this.tasksService.createTask(createTaskDto);
   }
 
-  @Get()
-  async findAllTasks(): Promise<Task[]> {
-    return this.tasksService.findAllTasks();
-  }
-
-
+  
   @Get(':id')
 async getTaskById(@Param('id') id: string): Promise<Task> {
   return this.tasksService.getTaskById(id);
+}
+
+@Get('/project/:projectId')
+async getTasksByProject(@Param('projectId') projectId: string) {
+  return this.tasksService.findTasksByProject(projectId);
 }
   
 }

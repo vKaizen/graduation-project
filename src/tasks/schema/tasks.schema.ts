@@ -18,7 +18,7 @@ export class Task extends Document {
   status: string;
 
   @Prop({ type: Types.ObjectId, ref: 'User' })
-  assignee: Types.ObjectId;
+  assignee: Types.ObjectId[];
 
   @Prop({ type: [{ type: Types.ObjectId, ref: 'Task' }] })
   subtasks: Types.ObjectId[];

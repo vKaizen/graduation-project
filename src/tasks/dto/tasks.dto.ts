@@ -8,7 +8,7 @@ export class CreateTaskDto {
   readonly description?: string;
   readonly dueDate?: Date;
   readonly status?: string;
-  readonly assignee?: Types.ObjectId;
+  readonly assignee?: Types.ObjectId[];
   readonly project: Types.ObjectId;
   readonly tags?: Types.ObjectId[];
   readonly priority?: string;
