@@ -7,6 +7,7 @@ import { Model } from 'mongoose';
 import { Task } from './schema/tasks.schema';
 import { CreateTaskDto } from './dto/tasks.dto';
 import { Project } from '../projects/schema/projects.schema';
+import { UpdateTaskDto } from './dto/updateTask.dto';
 
 
 
@@ -23,10 +24,10 @@ export class TasksService {
       throw new NotFoundException(`Project with ID ${createTaskDto.project} not found`);
     }
 
-    const invalidAssignees = createTaskDto.assignee.filter(
-      (assigneeId) => !project.members.includes(assigneeId),
+    const invalidAssignees = createTaskDto.assignee?.filter(
+      (assigneeId) => !project.roles.some((role) => role.userId.toString() === assigneeId.toString()),
     );
-    if (invalidAssignees.length > 0) {
+    if (invalidAssignees && invalidAssignees.length > 0) {
       throw new BadRequestException(
         `The following users are not members of the project: ${invalidAssignees.join(', ')}`,
       );
@@ -34,6 +35,28 @@ export class TasksService {
 
     const newTask = new this.taskModel(createTaskDto);
     return newTask.save();
+  }
+
+
+  async updateTask(id: string, updateTaskDto: UpdateTaskDto): Promise<Task> {
+    const updatedTask = await this.taskModel.findByIdAndUpdate(id, updateTaskDto, {
+      new: true,
+    }).exec();
+
+    if (!updatedTask) {
+      throw new NotFoundException(`Task with ID ${id} not found`);
+    }
+    return updatedTask;
+  }
+
+
+  async deleteTask(id: string): Promise<{ message: string }> {
+    const result = await this.taskModel.findByIdAndDelete(id).exec();
+
+    if (!result) {
+      throw new NotFoundException(`Task with ID ${id} not found`);
+    }
+    return { message: `Task with ID ${id} has been deleted` };
   }
 
   async findTasksByProject(projectId: string): Promise<Task[]> {
