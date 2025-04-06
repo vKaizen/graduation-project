@@ -10,11 +10,13 @@ import {
   Logger,
   NotFoundException,
   BadRequestException,
+  Request,
 } from '@nestjs/common';
 import { TasksService } from './tasks.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { Task } from './schema/tasks.schema';
 import { UpdateTaskDto } from './dto/updateTask.dto';
+import { CreatePersonalTaskDto } from './dto/create-personal-task.dto';
 
 @Controller('tasks')
 export class TasksController {
@@ -22,7 +24,7 @@ export class TasksController {
   
   constructor(private tasksService: TasksService) {}
 
-  @Post()  // Changed from 'new' to match frontend
+  @Post()
   async createTask(@Body() createTaskDto: CreateTaskDto): Promise<Task> {
     this.logger.log(`Creating new task with title: ${createTaskDto.title}`);
     return this.tasksService.createTask(createTaskDto);
@@ -68,7 +70,6 @@ export class TasksController {
     return this.tasksService.getTasksBySection(sectionId);
   }
 
-  // New endpoints to match frontend expectations
   @Patch(':taskId/move')
   async moveTask(
     @Param('taskId') taskId: string,
@@ -89,5 +90,29 @@ export class TasksController {
       throw new BadRequestException('Task IDs array is required');
     }
     return this.tasksService.reorderTasks(sectionId, reorderData.taskIds);
+  }
+
+  @Get('my-tasks')
+  async getMyTasks(@Request() req): Promise<Task[]> {
+    return this.tasksService.getMyTasks(req.user.id);
+  }
+
+  @Post('personal')
+  async createPersonalTask(
+    @Body() createPersonalTaskDto: CreatePersonalTaskDto,
+    @Request() req
+  ): Promise<Task> {
+    return this.tasksService.createPersonalTask(
+      createPersonalTaskDto,
+      req.user.id
+    );
+  }
+
+  @Get(':taskId/permissions')
+  async getTaskPermissions(
+    @Param('taskId') taskId: string,
+    @Request() req
+  ) {
+    return this.tasksService.getTaskPermissions(taskId, req.user.id);
   }
 }

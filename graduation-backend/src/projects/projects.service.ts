@@ -32,65 +32,121 @@ export class ProjectsService {
       name,
       description,
       color,
-      status, 
+      status,
       roles: [{ userId: new Types.ObjectId(ownerId), role: 'Owner' }],
     });
 
     return project.save();
   }
 
-  async findAllProjects(): Promise<Project[]> {
+  async findAllProjects(userId: string): Promise<Project[]> {
+    console.log('Finding projects for userId:', userId);
+
+    // First, let's check if the userId is valid
+    if (!Types.ObjectId.isValid(userId)) {
+      console.log('Invalid userId format:', userId);
+      return [];
+    }
+
+    // Log the query we're about to execute
+    console.log('Executing query with filter:', {
+      'roles.userId': new Types.ObjectId(userId),
+    });
+
+    // Find all projects to see what's in the database
+    const allProjects = await this.projectModel.find({}).exec();
+    console.log(
+      'All projects in database:',
+      JSON.stringify(allProjects, null, 2),
+    );
+
     const projects = await this.projectModel
-      .find()
+      .find({
+        'roles.userId': new Types.ObjectId(userId),
+      })
       .populate({
         path: 'sections',
-        match: { _id: { $exists: true } }
+        match: { _id: { $exists: true } },
       })
       .exec();
 
+    console.log('Projects found for user:', JSON.stringify(projects, null, 2));
+
     // Filter out null sections from each project
-    return projects.map(project => {
-      project.sections = project.sections.filter(section => section !== null);
+    const filteredProjects = projects.map((project) => {
+      project.sections = project.sections.filter((section) => section !== null);
       return project;
     });
+
+    console.log(
+      'Final filtered projects:',
+      JSON.stringify(filteredProjects, null, 2),
+    );
+    return filteredProjects;
   }
 
-  async getProjectById(id: string): Promise<Project> {
+  async getProjectById(id: string, userId: string): Promise<Project> {
     if (!id || !Types.ObjectId.isValid(id)) {
-        throw new BadRequestException('Invalid project ID');
+      throw new BadRequestException('Invalid project ID');
     }
 
-    console.log('Fetching project with ID:', id);
+    if (!userId || !Types.ObjectId.isValid(userId)) {
+      throw new BadRequestException('Invalid user ID');
+    }
 
+    console.log('Fetching project with ID:', id, 'for user:', userId);
+
+    // First, let's check if the project exists at all
     const project = await this.projectModel
-        .findById(id)
-        .populate({
-            path: 'sections',
-            model: 'Section',
-            match: { _id: { $exists: true } },
-            populate: {
-                path: 'tasks',
-                model: 'Task',
-                options: { sort: { order: 1 } } // Sort tasks by order
-            }
-        })
-        .exec();
+      .findById(id)
+      .populate({
+        path: 'sections',
+        model: 'Section',
+        match: { _id: { $exists: true } },
+        populate: {
+          path: 'tasks',
+          model: 'Task',
+          options: { sort: { order: 1 } },
+        },
+      })
+      .exec();
 
     if (!project) {
-        throw new NotFoundException(`Project with ID ${id} not found`);
+      throw new NotFoundException(`Project with ID ${id} not found`);
+    }
+
+    // Log project roles for debugging
+    console.log('Project roles:', project.roles);
+
+    // Then check if the user has access
+    const hasAccess = project.roles.some((role) => {
+      const roleUserId = role.userId.toString();
+      console.log(
+        'Comparing role userId:',
+        roleUserId,
+        'with request userId:',
+        userId,
+      );
+      return roleUserId === userId;
+    });
+
+    console.log('Access check result:', hasAccess);
+
+    if (!hasAccess) {
+      throw new NotFoundException(`User does not have access to project ${id}`);
     }
 
     console.log('Raw project data:', {
-        id: project._id,
-        sectionsCount: project.sections?.length || 0,
-        sectionsData: JSON.stringify(project.sections, null, 2)
+      id: project._id,
+      sectionsCount: project.sections?.length || 0,
+      sectionsData: JSON.stringify(project.sections, null, 2),
     });
 
     // Filter out any null sections
-    project.sections = project.sections.filter(section => section !== null);
+    project.sections = project.sections.filter((section) => section !== null);
 
     return project;
-}
+  }
 
   async addMember(
     projectId: string,

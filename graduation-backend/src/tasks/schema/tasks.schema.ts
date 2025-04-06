@@ -25,10 +25,10 @@ export class Task extends Document {
   @Prop({ type: [{ type: Types.ObjectId, ref: 'Task' }] })
   subtasks: Types.ObjectId[];
 
-  @Prop({ type: Types.ObjectId, ref: 'Project', required: true })
+  @Prop({ type: Types.ObjectId, ref: 'Project', required: false })
   project: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'Section', required: true })
+  @Prop({ type: Types.ObjectId, ref: 'Section', required: false })
   section: Types.ObjectId;
 
   @Prop({ type: [{ type: Types.ObjectId, ref: 'Tag' }] })
@@ -45,7 +45,12 @@ export class Task extends Document {
 
   @Prop({ type: Number, default: 0 })
   order: number;
+
+  @Prop({ type: Boolean, default: false })
+  isPersonalTask: boolean;
+
+  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
+  createdBy: Types.ObjectId;
 }
 
-// Add this line to export the schema
 export const TaskSchema = SchemaFactory.createForClass(Task);

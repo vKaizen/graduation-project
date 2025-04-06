@@ -9,6 +9,8 @@ import {
   Headers,
   Delete,
   BadRequestException,
+  Request,
+  UseGuards,
 } from '@nestjs/common';
 import { ProjectsService } from './projects.service';
 import {
@@ -18,8 +20,10 @@ import {
 } from './dto/projects.dto';
 import { Project } from './schema/projects.schema';
 import { AuthService } from 'src/auth/auth.service';
+import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 
 @Controller('projects')
+@UseGuards(JwtAuthGuard)
 export class ProjectsController {
   constructor(
     private projectsService: ProjectsService,
@@ -29,18 +33,11 @@ export class ProjectsController {
   @Post()
   async createProject(
     @Body() createProjectDto: CreateProjectDto,
-    @Headers('Authorization') auth: string,
+    @Request() req,
   ) {
     try {
-      const token = auth?.split(' ')[1];
-      let ownerId = null;
-      
-      if (token) {
-        const userData = await this.authService.decodeToken(token);
-        ownerId = userData.sub;
-        createProjectDto.ownerId = ownerId;
-      }
-
+      const ownerId = req.user.userId;
+      createProjectDto.ownerId = ownerId;
       return this.projectsService.createProject(createProjectDto);
     } catch (error) {
       console.error('Error creating project:', error);
@@ -49,9 +46,12 @@ export class ProjectsController {
   }
 
   @Get()
-  async findAllProjects(): Promise<Project[]> {
+  async findAllProjects(@Request() req): Promise<Project[]> {
     try {
-      const projects = await this.projectsService.findAllProjects();
+      console.log('User object from request:', req.user);
+      const userId = req.user.userId;
+      console.log('Using userId:', userId);
+      const projects = await this.projectsService.findAllProjects(userId);
       return projects;
     } catch (error) {
       console.error('Error fetching all projects:', error);
@@ -60,17 +60,22 @@ export class ProjectsController {
   }
 
   @Get(':id')
-async getProjectById(@Param('id') id: string): Promise<Project> {
+  async getProjectById(
+    @Param('id') id: string,
+    @Request() req,
+  ): Promise<Project> {
     try {
-        if (!id) {
-            throw new BadRequestException('Project ID is required');
-        }
-        return await this.projectsService.getProjectById(id);
+      if (!id) {
+        throw new BadRequestException('Project ID is required');
+      }
+      const userId = req.user.userId;
+      console.log('Getting project with ID:', id, 'for user:', userId);
+      return await this.projectsService.getProjectById(id, userId);
     } catch (error) {
-        console.error(`Error fetching project ${id}:`, error);
-        throw error;
+      console.error(`Error fetching project ${id}:`, error);
+      throw error;
     }
-}
+  }
 
   @Patch(':id/members')
   async addMemberToProject(
@@ -100,6 +105,4 @@ async getProjectById(@Param('id') id: string): Promise<Project> {
       throw error;
     }
   }
-
-  
 }
