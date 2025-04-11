@@ -12,19 +12,36 @@ import {
   AddMemberDto,
   UpdateProjectStatusDto,
 } from './dto/projects.dto';
+import { ActivityLogsService } from '../activity-logs/activity-logs.service';
+
+// Interface for authenticated user
+interface AuthUser {
+  userId: string;
+  name: string;
+}
 
 @Injectable()
 export class ProjectsService {
   constructor(
     @InjectModel(Project.name) private projectModel: Model<Project>,
+    private readonly activityLogsService: ActivityLogsService,
   ) {}
 
-  async createProject(createProjectDto: CreateProjectDto): Promise<Project> {
-    const { name, description, color, status, ownerId } = createProjectDto;
+  async createProject(
+    createProjectDto: CreateProjectDto,
+    authUser?: AuthUser,
+  ): Promise<Project> {
+    const { name, description, color, status, ownerId, teamId } =
+      createProjectDto;
 
     // Validate ownerId
     if (!Types.ObjectId.isValid(ownerId)) {
       throw new BadRequestException('Invalid owner ID');
+    }
+
+    // Validate teamId if provided
+    if (teamId && !Types.ObjectId.isValid(teamId)) {
+      throw new BadRequestException('Invalid team ID');
     }
 
     // Build a new Project instance
@@ -32,11 +49,22 @@ export class ProjectsService {
       name,
       description,
       color,
-      status,
+      status: status || 'on-track', // Set default status if not provided
+      teamId: teamId ? new Types.ObjectId(teamId) : undefined,
       roles: [{ userId: new Types.ObjectId(ownerId), role: 'Owner' }],
     });
 
-    return project.save();
+    const savedProject = await project.save();
+
+    // Log project creation
+    await this.activityLogsService.createLog({
+      projectId: savedProject._id.toString(),
+      type: 'created',
+      content: 'Created new project',
+      user: authUser,
+    });
+
+    return savedProject;
   }
 
   async findAllProjects(userId: string): Promise<Project[]> {
@@ -208,6 +236,7 @@ export class ProjectsService {
   async updateProjectStatus(
     projectId: string,
     updateProjectStatusDto: UpdateProjectStatusDto,
+    authUser?: AuthUser,
   ): Promise<Project> {
     if (!Types.ObjectId.isValid(projectId)) {
       throw new BadRequestException('Invalid project ID');
@@ -223,6 +252,53 @@ export class ProjectsService {
       throw new NotFoundException('Project not found');
     }
 
+    // Log the status update
+    await this.activityLogsService.createLog({
+      projectId,
+      type: 'updated',
+      content: `Changed project status to ${updateProjectStatusDto.status}`,
+      user: authUser,
+    });
+
     return updatedProject;
+  }
+
+  async updateProjectDescription(
+    projectId: string,
+    description: string,
+    authUser?: AuthUser,
+  ): Promise<Project> {
+    if (!Types.ObjectId.isValid(projectId)) {
+      throw new BadRequestException('Invalid project ID');
+    }
+
+    const updatedProject = await this.projectModel.findByIdAndUpdate(
+      projectId,
+      { description },
+      { new: true },
+    );
+
+    if (!updatedProject) {
+      throw new NotFoundException('Project not found');
+    }
+
+    // Log the description update
+    await this.activityLogsService.createLog({
+      projectId,
+      type: 'updated',
+      content: 'Updated project description',
+      user: authUser,
+    });
+
+    return updatedProject;
+  }
+
+  async getProjectActivities(projectId: string) {
+    if (!Types.ObjectId.isValid(projectId)) {
+      throw new BadRequestException('Invalid project ID');
+    }
+
+    // Use the activity logs service to get real logs
+    return this.activityLogsService.getLogsByProjectId(projectId);
   }
 }

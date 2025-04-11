@@ -10,6 +10,7 @@ import { CommentsModule } from './comments/comments.module';
 import { AuthModule } from './auth/auth.module';
 import { ConfigModule } from '@nestjs/config';
 import { SectionsModule } from './sections/sections.module';
+import { ActivityLogsModule } from './activity-logs/activity-logs.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { SectionsModule } from './sections/sections.module';
     TeamsModule,
     CommentsModule,
     SectionsModule,
+    ActivityLogsModule,
     MongooseModule.forRoot(process.env.MONGODB_URI),
     AuthModule,
   ],

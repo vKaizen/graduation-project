@@ -17,6 +17,7 @@ import {
   CreateProjectDto,
   AddMemberDto,
   UpdateProjectStatusDto,
+  UpdateProjectDescriptionDto,
 } from './dto/projects.dto';
 import { Project } from './schema/projects.schema';
 import { AuthService } from 'src/auth/auth.service';
@@ -38,7 +39,14 @@ export class ProjectsController {
     try {
       const ownerId = req.user.userId;
       createProjectDto.ownerId = ownerId;
-      return this.projectsService.createProject(createProjectDto);
+
+      // Pass authenticated user info
+      const authUser = {
+        userId: req.user.userId,
+        name: req.user.username || 'Unknown User',
+      };
+
+      return this.projectsService.createProject(createProjectDto, authUser);
     } catch (error) {
       console.error('Error creating project:', error);
       throw error;
@@ -81,8 +89,16 @@ export class ProjectsController {
   async addMemberToProject(
     @Param('id') projectId: string,
     @Body() addMemberDto: AddMemberDto,
+    @Request() req,
   ): Promise<Project> {
     try {
+      // Pass authenticated user info for activity logging
+      const authUser = {
+        userId: req.user.userId,
+        name: req.user.username || 'Unknown User',
+      };
+
+      // Add member logging could be added to the service
       return await this.projectsService.addMember(projectId, addMemberDto);
     } catch (error) {
       console.error(`Error adding member to project ${projectId}:`, error);
@@ -94,14 +110,59 @@ export class ProjectsController {
   async updateProjectStatus(
     @Param('id') projectId: string,
     @Body() updateProjectStatusDto: UpdateProjectStatusDto,
+    @Request() req,
   ): Promise<Project> {
     try {
+      // Pass authenticated user info for activity logging
+      const authUser = {
+        userId: req.user.userId,
+        name: req.user.username || 'Unknown User',
+      };
+
       return await this.projectsService.updateProjectStatus(
         projectId,
         updateProjectStatusDto,
+        authUser,
       );
     } catch (error) {
       console.error(`Error updating project ${projectId} status:`, error);
+      throw error;
+    }
+  }
+
+  @Get(':id/activities')
+  async getProjectActivities(@Param('id') projectId: string) {
+    try {
+      return await this.projectsService.getProjectActivities(projectId);
+    } catch (error) {
+      console.error(
+        `Error fetching activities for project ${projectId}:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  @Patch(':id')
+  async updateProject(
+    @Param('id') projectId: string,
+    @Body() updateProjectDescriptionDto: UpdateProjectDescriptionDto,
+    @Request() req,
+  ): Promise<Project> {
+    try {
+      // Pass authenticated user info for activity logging
+      const authUser = {
+        userId: req.user.userId,
+        name: req.user.username || 'Unknown User',
+      };
+
+      return await this.projectsService.updateProjectDescription(
+        projectId,
+        updateProjectDescriptionDto.description,
+        authUser,
+      );
+    } catch (error) {
+      console.error(`Error updating project ${projectId}:`, error);
       throw error;
     }
   }

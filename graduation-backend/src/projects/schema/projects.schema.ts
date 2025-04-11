@@ -13,6 +13,16 @@ export class Project extends Document {
   @Prop({ required: true, type: String })
   color: string;
 
+  @Prop({
+    type: String,
+    default: 'on-track',
+    enum: ['on-track', 'at-risk', 'off-track'],
+  })
+  status: string;
+
+  @Prop({ type: Types.ObjectId, ref: 'Team' })
+  teamId: Types.ObjectId;
+
   @Prop({ type: [{ type: Object }] })
   roles: {
     userId: Types.ObjectId;

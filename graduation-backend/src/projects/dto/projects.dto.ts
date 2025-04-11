@@ -1,5 +1,11 @@
 /* eslint-disable prettier/prettier */
-import { IsString, IsNotEmpty, IsOptional, IsIn } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  IsIn,
+  IsMongoId,
+} from 'class-validator';
 
 export class CreateProjectDto {
   @IsString()
@@ -20,10 +26,14 @@ export class CreateProjectDto {
 
   @IsString()
   @IsOptional()
-  @IsIn(['active', 'completed', 'archived'], {
-    message: 'Status must be active, completed, or archived',
+  @IsIn(['on-track', 'at-risk', 'off-track'], {
+    message: 'Status must be on-track, at-risk, or off-track',
   })
   status?: string;
+
+  @IsMongoId()
+  @IsOptional()
+  teamId?: string;
 }
 
 export class AddMemberDto {
@@ -41,8 +51,14 @@ export class AddMemberDto {
 export class UpdateProjectStatusDto {
   @IsString()
   @IsNotEmpty()
-  @IsIn(['active', 'completed', 'archived'], {
-    message: 'Status must be active, completed, or archived',
+  @IsIn(['on-track', 'at-risk', 'off-track'], {
+    message: 'Status must be on-track, at-risk, or off-track',
   })
   status: string;
+}
+
+export class UpdateProjectDescriptionDto {
+  @IsString()
+  @IsNotEmpty()
+  description: string;
 }

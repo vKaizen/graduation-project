@@ -6,8 +6,6 @@ import { User } from './schema/users.schema';
 import { CreateUserDto } from './dto/users.dto';
 import * as bcrypt from 'bcrypt';
 
-
-
 @Injectable()
 export class UsersService {
   // Add valid roles as a class property
@@ -23,10 +21,10 @@ export class UsersService {
   async createUser(createUserDto: CreateUserDto): Promise<User> {
     const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
     const newUser = new this.userModel({
-        ...createUserDto,
-        password: hashedPassword
+      ...createUserDto,
+      password: hashedPassword,
     });
-    
+
     return newUser.save();
   }
 
@@ -34,9 +32,11 @@ export class UsersService {
     return this.userModel.findById(userId).exec();
   }
 
- 
-
   async findOneByEmail(email: string): Promise<User | null> {
     return this.userModel.findOne({ email }).exec();
+  }
+
+  async getAllUsers(): Promise<User[]> {
+    return this.userModel.find().exec();
   }
 }
