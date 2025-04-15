@@ -2,7 +2,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 
-@Schema()
+@Schema({ timestamps: true })
 export class Project extends Document {
   @Prop({ required: true })
   name: string;
@@ -20,8 +20,8 @@ export class Project extends Document {
   })
   status: string;
 
-  @Prop({ type: Types.ObjectId, ref: 'Team' })
-  teamId: Types.ObjectId;
+  @Prop({ type: Types.ObjectId, ref: 'Workspace', required: true })
+  workspaceId: Types.ObjectId;
 
   @Prop({ type: [{ type: Object }] })
   roles: {
@@ -31,6 +31,9 @@ export class Project extends Document {
 
   @Prop({ type: [{ type: Types.ObjectId, ref: 'Section' }], default: [] })
   sections: Types.ObjectId[];
+
+  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
+  createdBy: Types.ObjectId;
 }
 
 // Create and export the schema

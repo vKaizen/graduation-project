@@ -32,8 +32,8 @@ export class CreateProjectDto {
   status?: string;
 
   @IsMongoId()
-  @IsOptional()
-  teamId?: string;
+  @IsNotEmpty()
+  workspaceId: string;
 }
 
 export class AddMemberDto {

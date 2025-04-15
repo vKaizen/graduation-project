@@ -12,15 +12,15 @@ export class CreateUserDto {
   @IsNotEmpty()
   password: string;
 
- 
   @IsOptional()
   profilePictureUrl?: string;
 
   @IsOptional()
   jobTitle?: string;
 
+  @IsString()
   @IsOptional()
-  departmentOrTeam?: string;
+  department?: string;
 
   @IsOptional()
   bio?: string;

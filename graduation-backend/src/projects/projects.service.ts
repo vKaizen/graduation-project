@@ -3,6 +3,7 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -13,6 +14,7 @@ import {
   UpdateProjectStatusDto,
 } from './dto/projects.dto';
 import { ActivityLogsService } from '../activity-logs/activity-logs.service';
+import { WorkspacesService } from '../workspaces/workspaces.service';
 
 // Interface for authenticated user
 interface AuthUser {
@@ -25,13 +27,14 @@ export class ProjectsService {
   constructor(
     @InjectModel(Project.name) private projectModel: Model<Project>,
     private readonly activityLogsService: ActivityLogsService,
+    private readonly workspacesService: WorkspacesService,
   ) {}
 
   async createProject(
     createProjectDto: CreateProjectDto,
     authUser?: AuthUser,
   ): Promise<Project> {
-    const { name, description, color, status, ownerId, teamId } =
+    const { name, description, color, status, ownerId, workspaceId } =
       createProjectDto;
 
     // Validate ownerId
@@ -39,9 +42,16 @@ export class ProjectsService {
       throw new BadRequestException('Invalid owner ID');
     }
 
-    // Validate teamId if provided
-    if (teamId && !Types.ObjectId.isValid(teamId)) {
-      throw new BadRequestException('Invalid team ID');
+    // Validate workspaceId
+    if (!workspaceId || !Types.ObjectId.isValid(workspaceId)) {
+      throw new BadRequestException('Invalid workspace ID');
+    }
+
+    // Verify that the user has access to the workspace
+    try {
+      await this.workspacesService.findById(workspaceId, ownerId);
+    } catch (error) {
+      throw new ForbiddenException('You do not have access to this workspace');
     }
 
     // Build a new Project instance
@@ -50,8 +60,9 @@ export class ProjectsService {
       description,
       color,
       status: status || 'on-track', // Set default status if not provided
-      teamId: teamId ? new Types.ObjectId(teamId) : undefined,
+      workspaceId: new Types.ObjectId(workspaceId),
       roles: [{ userId: new Types.ObjectId(ownerId), role: 'Owner' }],
+      createdBy: new Types.ObjectId(ownerId),
     });
 
     const savedProject = await project.save();
@@ -71,25 +82,19 @@ export class ProjectsService {
     console.log('Finding projects for userId:', userId);
 
     // First, let's check if the userId is valid
-    if (!Types.ObjectId.isValid(userId)) {
+    if (!userId || !Types.ObjectId.isValid(userId)) {
       console.log('Invalid userId format:', userId);
       return [];
     }
 
-    // Log the query we're about to execute
-    console.log('Executing query with filter:', {
-      'roles.userId': new Types.ObjectId(userId),
-    });
+    // Get all workspaces the user has access to
+    const workspaces = await this.workspacesService.findAll(userId);
+    const workspaceIds = workspaces.map((workspace) => workspace._id);
 
-    // Find all projects to see what's in the database
-    const allProjects = await this.projectModel.find({}).exec();
-    console.log(
-      'All projects in database:',
-      JSON.stringify(allProjects, null, 2),
-    );
-
+    // Find all projects where the user has access and belongs to one of their workspaces
     const projects = await this.projectModel
       .find({
+        workspaceId: { $in: workspaceIds },
         'roles.userId': new Types.ObjectId(userId),
       })
       .populate({
@@ -106,11 +111,38 @@ export class ProjectsService {
       return project;
     });
 
-    console.log(
-      'Final filtered projects:',
-      JSON.stringify(filteredProjects, null, 2),
-    );
     return filteredProjects;
+  }
+
+  async findProjectsByWorkspace(
+    workspaceId: string,
+    userId: string,
+  ): Promise<Project[]> {
+    if (!workspaceId || !Types.ObjectId.isValid(workspaceId)) {
+      throw new BadRequestException('Invalid workspace ID');
+    }
+
+    // Verify that the user has access to the workspace
+    try {
+      await this.workspacesService.findById(workspaceId, userId);
+    } catch (error) {
+      throw new ForbiddenException('You do not have access to this workspace');
+    }
+
+    // Find all projects in the workspace
+    const projects = await this.projectModel
+      .find({ workspaceId: new Types.ObjectId(workspaceId) })
+      .populate({
+        path: 'sections',
+        match: { _id: { $exists: true } },
+      })
+      .exec();
+
+    // Filter out null sections from each project
+    return projects.map((project) => {
+      project.sections = project.sections.filter((section) => section !== null);
+      return project;
+    });
   }
 
   async getProjectById(id: string, userId: string): Promise<Project> {
@@ -143,32 +175,26 @@ export class ProjectsService {
       throw new NotFoundException(`Project with ID ${id} not found`);
     }
 
-    // Log project roles for debugging
-    console.log('Project roles:', project.roles);
-
-    // Then check if the user has access
-    const hasAccess = project.roles.some((role) => {
-      const roleUserId = role.userId.toString();
-      console.log(
-        'Comparing role userId:',
-        roleUserId,
-        'with request userId:',
+    // Verify that the user has access to the workspace that contains this project
+    try {
+      await this.workspacesService.findById(
+        project.workspaceId.toString(),
         userId,
       );
-      return roleUserId === userId;
-    });
-
-    console.log('Access check result:', hasAccess);
-
-    if (!hasAccess) {
-      throw new NotFoundException(`User does not have access to project ${id}`);
+    } catch (error) {
+      throw new ForbiddenException('You do not have access to this workspace');
     }
 
-    console.log('Raw project data:', {
-      id: project._id,
-      sectionsCount: project.sections?.length || 0,
-      sectionsData: JSON.stringify(project.sections, null, 2),
+    // Also check if the user has access to the project itself
+    const hasAccess = project.roles.some((role) => {
+      return role.userId.toString() === userId;
     });
+
+    if (!hasAccess) {
+      throw new ForbiddenException(
+        `User does not have access to project ${id}`,
+      );
+    }
 
     // Filter out any null sections
     project.sections = project.sections.filter((section) => section !== null);
@@ -176,89 +202,28 @@ export class ProjectsService {
     return project;
   }
 
-  async addMember(
-    projectId: string,
-    addMemberDto: AddMemberDto,
-  ): Promise<Project> {
-    const { userId, role } = addMemberDto;
-
-    // Validate projectId
-    if (!Types.ObjectId.isValid(projectId)) {
-      throw new BadRequestException('Invalid project ID');
-    }
-
-    // Validate userId
-    if (!Types.ObjectId.isValid(userId)) {
-      throw new BadRequestException('Invalid user ID');
-    }
-
-    // Step 1: Attempt to push if userId doesn't exist in roles
-    const updatedProject = await this.projectModel.findOneAndUpdate(
-      {
-        _id: projectId,
-        'roles.userId': { $ne: new Types.ObjectId(userId) },
-      },
-      {
-        $push: {
-          roles: {
-            userId: new Types.ObjectId(userId),
-            role,
-          },
-        },
-      },
-      { new: true },
-    );
-
-    if (!updatedProject) {
-      const projectWithUpdatedRole = await this.projectModel.findOneAndUpdate(
-        {
-          _id: projectId,
-          'roles.userId': new Types.ObjectId(userId),
-        },
-        {
-          $set: {
-            'roles.$.role': role,
-          },
-        },
-        { new: true },
-      );
-
-      if (!projectWithUpdatedRole) {
-        throw new NotFoundException('Project not found');
-      }
-
-      return projectWithUpdatedRole;
-    }
-
-    return updatedProject;
-  }
-
   async updateProjectStatus(
     projectId: string,
-    updateProjectStatusDto: UpdateProjectStatusDto,
+    updateStatusDto: UpdateProjectStatusDto,
+    userId: string,
     authUser?: AuthUser,
   ): Promise<Project> {
-    if (!Types.ObjectId.isValid(projectId)) {
-      throw new BadRequestException('Invalid project ID');
+    // First, get the project to validate access
+    const project = await this.getProjectById(projectId, userId);
+
+    // Update status
+    project.status = updateStatusDto.status;
+    const updatedProject = await project.save();
+
+    // Log status update
+    if (authUser) {
+      await this.activityLogsService.createLog({
+        projectId,
+        type: 'updated',
+        content: `Updated project status to ${updateStatusDto.status}`,
+        user: authUser,
+      });
     }
-
-    const updatedProject = await this.projectModel.findByIdAndUpdate(
-      projectId,
-      { status: updateProjectStatusDto.status },
-      { new: true },
-    );
-
-    if (!updatedProject) {
-      throw new NotFoundException('Project not found');
-    }
-
-    // Log the status update
-    await this.activityLogsService.createLog({
-      projectId,
-      type: 'updated',
-      content: `Changed project status to ${updateProjectStatusDto.status}`,
-      user: authUser,
-    });
 
     return updatedProject;
   }
@@ -266,37 +231,76 @@ export class ProjectsService {
   async updateProjectDescription(
     projectId: string,
     description: string,
+    userId: string,
     authUser?: AuthUser,
   ): Promise<Project> {
-    if (!Types.ObjectId.isValid(projectId)) {
-      throw new BadRequestException('Invalid project ID');
+    // First, get the project to validate access
+    const project = await this.getProjectById(projectId, userId);
+
+    // Update description
+    project.description = description;
+    const updatedProject = await project.save();
+
+    // Log description update
+    if (authUser) {
+      await this.activityLogsService.createLog({
+        projectId,
+        type: 'updated',
+        content: 'Updated project description',
+        user: authUser,
+      });
     }
-
-    const updatedProject = await this.projectModel.findByIdAndUpdate(
-      projectId,
-      { description },
-      { new: true },
-    );
-
-    if (!updatedProject) {
-      throw new NotFoundException('Project not found');
-    }
-
-    // Log the description update
-    await this.activityLogsService.createLog({
-      projectId,
-      type: 'updated',
-      content: 'Updated project description',
-      user: authUser,
-    });
 
     return updatedProject;
   }
 
-  async getProjectActivities(projectId: string) {
+  async addProjectMember(
+    projectId: string,
+    memberData: AddMemberDto,
+    userId: string,
+    authUser?: AuthUser,
+  ): Promise<Project> {
+    // First, get the project to validate access
+    const project = await this.getProjectById(projectId, userId);
+
+    // Check if user is already a member
+    const existingMember = project.roles.find(
+      (role) => role.userId.toString() === memberData.userId,
+    );
+
+    if (existingMember) {
+      // If user is already a member, just update the role
+      existingMember.role = memberData.role;
+    } else {
+      // Otherwise, add the new member
+      project.roles.push({
+        userId: new Types.ObjectId(memberData.userId),
+        role: memberData.role,
+      });
+    }
+
+    const updatedProject = await project.save();
+
+    // Log member addition
+    if (authUser) {
+      await this.activityLogsService.createLog({
+        projectId,
+        type: 'updated',
+        content: `Added or updated member with role ${memberData.role}`,
+        user: authUser,
+      });
+    }
+
+    return updatedProject;
+  }
+
+  async getProjectActivities(projectId: string, userId: string) {
     if (!Types.ObjectId.isValid(projectId)) {
       throw new BadRequestException('Invalid project ID');
     }
+
+    // First, get the project to validate access
+    await this.getProjectById(projectId, userId);
 
     // Use the activity logs service to get real logs
     return this.activityLogsService.getLogsByProjectId(projectId);

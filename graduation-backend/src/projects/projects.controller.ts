@@ -56,11 +56,8 @@ export class ProjectsController {
   @Get()
   async findAllProjects(@Request() req): Promise<Project[]> {
     try {
-      console.log('User object from request:', req.user);
       const userId = req.user.userId;
-      console.log('Using userId:', userId);
-      const projects = await this.projectsService.findAllProjects(userId);
-      return projects;
+      return await this.projectsService.findAllProjects(userId);
     } catch (error) {
       console.error('Error fetching all projects:', error);
       throw error;
@@ -73,67 +70,77 @@ export class ProjectsController {
     @Request() req,
   ): Promise<Project> {
     try {
-      if (!id) {
-        throw new BadRequestException('Project ID is required');
-      }
-      const userId = req.user.userId;
-      console.log('Getting project with ID:', id, 'for user:', userId);
-      return await this.projectsService.getProjectById(id, userId);
+      return await this.projectsService.getProjectById(id, req.user.userId);
     } catch (error) {
       console.error(`Error fetching project ${id}:`, error);
       throw error;
     }
   }
 
+  @Patch(':id/status')
+  async updateProjectStatus(
+    @Param('id') id: string,
+    @Body() updateStatusDto: UpdateProjectStatusDto,
+    @Request() req,
+  ): Promise<Project> {
+    const authUser = {
+      userId: req.user.userId,
+      name: req.user.username || 'Unknown User',
+    };
+
+    return this.projectsService.updateProjectStatus(
+      id,
+      updateStatusDto,
+      req.user.userId,
+      authUser,
+    );
+  }
+
+  @Patch(':id')
+  async updateProjectDescription(
+    @Param('id') id: string,
+    @Body() updateProjectDto: UpdateProjectDescriptionDto,
+    @Request() req,
+  ): Promise<Project> {
+    const authUser = {
+      userId: req.user.userId,
+      name: req.user.username || 'Unknown User',
+    };
+
+    return this.projectsService.updateProjectDescription(
+      id,
+      updateProjectDto.description,
+      req.user.userId,
+      authUser,
+    );
+  }
+
   @Patch(':id/members')
-  async addMemberToProject(
-    @Param('id') projectId: string,
+  async addProjectMember(
+    @Param('id') id: string,
     @Body() addMemberDto: AddMemberDto,
     @Request() req,
   ): Promise<Project> {
-    try {
-      // Pass authenticated user info for activity logging
-      const authUser = {
-        userId: req.user.userId,
-        name: req.user.username || 'Unknown User',
-      };
+    const authUser = {
+      userId: req.user.userId,
+      name: req.user.username || 'Unknown User',
+    };
 
-      // Add member logging could be added to the service
-      return await this.projectsService.addMember(projectId, addMemberDto);
-    } catch (error) {
-      console.error(`Error adding member to project ${projectId}:`, error);
-      throw error;
-    }
-  }
-
-  @Patch(':id/status')
-  async updateProjectStatus(
-    @Param('id') projectId: string,
-    @Body() updateProjectStatusDto: UpdateProjectStatusDto,
-    @Request() req,
-  ): Promise<Project> {
-    try {
-      // Pass authenticated user info for activity logging
-      const authUser = {
-        userId: req.user.userId,
-        name: req.user.username || 'Unknown User',
-      };
-
-      return await this.projectsService.updateProjectStatus(
-        projectId,
-        updateProjectStatusDto,
-        authUser,
-      );
-    } catch (error) {
-      console.error(`Error updating project ${projectId} status:`, error);
-      throw error;
-    }
+    return this.projectsService.addProjectMember(
+      id,
+      addMemberDto,
+      req.user.userId,
+      authUser,
+    );
   }
 
   @Get(':id/activities')
-  async getProjectActivities(@Param('id') projectId: string) {
+  async getProjectActivities(@Param('id') projectId: string, @Request() req) {
     try {
-      return await this.projectsService.getProjectActivities(projectId);
+      return await this.projectsService.getProjectActivities(
+        projectId,
+        req.user.userId,
+      );
     } catch (error) {
       console.error(
         `Error fetching activities for project ${projectId}:`,
@@ -142,28 +149,40 @@ export class ProjectsController {
       throw error;
     }
   }
+}
 
-  @Patch(':id')
-  async updateProject(
-    @Param('id') projectId: string,
-    @Body() updateProjectDescriptionDto: UpdateProjectDescriptionDto,
+@Controller('workspaces/:workspaceId/projects')
+@UseGuards(JwtAuthGuard)
+export class WorkspaceProjectsController {
+  constructor(private readonly projectsService: ProjectsService) {}
+
+  @Get()
+  async getProjectsByWorkspace(
+    @Param('workspaceId') workspaceId: string,
+    @Request() req,
+  ): Promise<Project[]> {
+    return this.projectsService.findProjectsByWorkspace(
+      workspaceId,
+      req.user.userId,
+    );
+  }
+
+  @Post()
+  async createProjectInWorkspace(
+    @Param('workspaceId') workspaceId: string,
+    @Body() createProjectDto: CreateProjectDto,
     @Request() req,
   ): Promise<Project> {
-    try {
-      // Pass authenticated user info for activity logging
-      const authUser = {
-        userId: req.user.userId,
-        name: req.user.username || 'Unknown User',
-      };
+    // Ensure the workspaceId from the route is used
+    createProjectDto.workspaceId = workspaceId;
+    createProjectDto.ownerId = req.user.userId;
 
-      return await this.projectsService.updateProjectDescription(
-        projectId,
-        updateProjectDescriptionDto.description,
-        authUser,
-      );
-    } catch (error) {
-      console.error(`Error updating project ${projectId}:`, error);
-      throw error;
-    }
+    // Pass authenticated user info
+    const authUser = {
+      userId: req.user.userId,
+      name: req.user.username || 'Unknown User',
+    };
+
+    return this.projectsService.createProject(createProjectDto, authUser);
   }
 }
