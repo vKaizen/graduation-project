@@ -9,11 +9,13 @@ import { UsersModule } from '../users/users.module';
 import { RolesGuard } from './guards/roles.guard';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { WorkspacesModule } from '../workspaces/workspaces.module';
 
 @Module({
   imports: [
     ConfigModule,
     forwardRef(() => UsersModule),
+    forwardRef(() => WorkspacesModule),
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       imports: [ConfigModule],

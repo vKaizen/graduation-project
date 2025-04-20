@@ -17,6 +17,7 @@ export type SanitizedUser = {
   userId: string; // Assuming '_id' is the MongoDB default identifier
   username: string; // Assuming 'email' is used as username
   role: string[]; // Assuming 'roles' is correct and it's an array
+  defaultWorkspaceId?: string; // User's default workspace
 };
 
 @Injectable()
@@ -65,6 +66,9 @@ export class AuthService {
       userId: user._id.toString(), // Convert MongoDB ObjectId to string
       username: user.email, // Assuming email is used as username
       role: [user.role], // Ensure this is included and correct based on your schema
+      defaultWorkspaceId: user.defaultWorkspaceId
+        ? user.defaultWorkspaceId.toString()
+        : undefined,
     };
   }
 
@@ -78,7 +82,12 @@ export class AuthService {
   async login(user: {
     email: string;
     password: string;
-  }): Promise<{ accessToken: string }> {
+  }): Promise<{
+    accessToken: string;
+    userId: string;
+    username: string;
+    defaultWorkspaceId?: string;
+  }> {
     const validatedUser = await this.validateUser(user.email, user.password);
     if (!validatedUser) {
       throw new UnauthorizedException('Invalid credentials');
@@ -88,12 +97,16 @@ export class AuthService {
       username: validatedUser.username,
       sub: validatedUser.userId,
       roles: [validatedUser.role], // Ensure this is included
+      defaultWorkspaceId: validatedUser.defaultWorkspaceId,
     };
 
-    console.log('Creating token with payload:');
+    console.log('Creating token with payload:', payload);
 
     return {
       accessToken: this.jwtService.sign(payload),
+      userId: validatedUser.userId,
+      username: validatedUser.username,
+      defaultWorkspaceId: validatedUser.defaultWorkspaceId,
     };
   }
 

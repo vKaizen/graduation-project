@@ -97,3 +97,41 @@ Nest is an MIT-licensed open source project. It can grow thanks to the sponsors 
 ## License
 
 Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+
+# Graduation Project Backend
+
+## Personal Workspace Feature
+
+The system automatically creates a personal workspace for every new user during registration.
+
+### Implementation Details
+
+1. When a user is created (via `POST /api/users/register`):
+
+   - A personal workspace is created automatically with the name `${user.fullName}'s Workspace`
+   - The user is set as the owner of this workspace
+   - The user is added to the workspace's members array with the role "owner"
+   - The user document is updated with a reference to this workspace as their default
+
+2. Workspace Structure:
+
+   - Each workspace has an `owner` field (reference to User)
+   - Each workspace has a `members` array with objects containing:
+     ```ts
+     members: [
+       {
+         userId: ObjectId (reference to User),
+         role: 'owner' | 'admin' | 'member'
+       }
+     ]
+     ```
+
+3. User Login & Workspace Access:
+   - When a user logs in, their default workspace ID is returned
+   - The frontend automatically selects this workspace when the user first logs in
+
+### Benefits
+
+- Users can immediately start using the application without needing to set up a workspace
+- The system has a consistent data model where all activities happen within a workspace
+- Organization structure can evolve naturally (from personal to team workspaces)

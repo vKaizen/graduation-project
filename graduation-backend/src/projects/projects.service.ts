@@ -37,6 +37,10 @@ export class ProjectsService {
     const { name, description, color, status, ownerId, workspaceId } =
       createProjectDto;
 
+    console.log(
+      `Creating project with owner ${ownerId} in workspace ${workspaceId}`,
+    );
+
     // Validate ownerId
     if (!Types.ObjectId.isValid(ownerId)) {
       throw new BadRequestException('Invalid owner ID');
@@ -49,9 +53,63 @@ export class ProjectsService {
 
     // Verify that the user has access to the workspace
     try {
-      await this.workspacesService.findById(workspaceId, ownerId);
+      console.log(
+        `Verifying workspace access for user ${ownerId} in workspace ${workspaceId}`,
+      );
+      const workspace = await this.workspacesService.findById(
+        workspaceId,
+        ownerId,
+      );
+
+      // Additional check for admin/owner role at project creation
+      if (workspace) {
+        console.log(
+          `Workspace found, checking member role: ${JSON.stringify(workspace.owner)}`,
+        );
+
+        // Owner check
+        const isOwner = workspace.owner.toString() === ownerId.toString();
+
+        // Admin/member check
+        let userRole = null;
+
+        // Handle various member formats
+        if (Array.isArray(workspace.members)) {
+          for (const member of workspace.members) {
+            if (typeof member === 'string') {
+              // Old format: string ID
+              if (member === ownerId) {
+                userRole = 'member'; // Default role for string members
+                break;
+              }
+            } else if (typeof member === 'object' && member !== null) {
+              // New format: object with userId and role
+              const memberId = member.userId?.toString();
+              if (memberId === ownerId.toString()) {
+                userRole = member.role || 'member';
+                break;
+              }
+            }
+          }
+        }
+
+        console.log(`User role in workspace: ${userRole}, isOwner: ${isOwner}`);
+
+        // Only owner and admin can create projects
+        if (
+          !isOwner &&
+          (!userRole || (userRole !== 'admin' && userRole !== 'owner'))
+        ) {
+          throw new ForbiddenException(
+            'Only workspace owners and admins can create projects',
+          );
+        }
+      }
     } catch (error) {
-      throw new ForbiddenException('You do not have access to this workspace');
+      console.error(`Workspace access error: ${error.message}`);
+      throw new ForbiddenException(
+        error.message || 'You do not have access to this workspace',
+      );
     }
 
     // Build a new Project instance
@@ -66,6 +124,7 @@ export class ProjectsService {
     });
 
     const savedProject = await project.save();
+    console.log(`Project created: ${savedProject._id}`);
 
     // Log project creation
     await this.activityLogsService.createLog({

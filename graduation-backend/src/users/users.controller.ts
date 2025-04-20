@@ -18,7 +18,6 @@ import { Roles } from 'src/auth/decorators/roles.decorator';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 
 @Controller('users')
-@UseGuards(RolesGuard)
 export class UsersController {
   constructor(
     private readonly usersService: UsersService,
@@ -26,11 +25,19 @@ export class UsersController {
     private readonly authService: AuthService,
   ) {}
 
-  // Only admins can register new users
+  // Public registration endpoint - anyone can register
   @Post('register')
-  async createUser(@Body() createUserDto: CreateUserDto): Promise<User> {
+  async createUser(@Body() createUserDto: CreateUserDto): Promise<any> {
     console.log('Received createUser request:', createUserDto);
-    return this.usersService.createUser(createUserDto);
+    const user = await this.usersService.createUser(createUserDto);
+
+    // Return only necessary user info without exposing sensitive data
+    return {
+      _id: user._id,
+      email: user.email,
+      fullName: user.fullName,
+      defaultWorkspaceId: user.defaultWorkspaceId,
+    };
   }
 
   // Login does not require roles since users need to authenticate
@@ -40,6 +47,7 @@ export class UsersController {
   }
 
   // Both admins and users can access this, but ensure users can only access their own profile
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Get(':id')
   @Roles('Admin', 'User')
   async getUserById(@Param('id') id: string) {
@@ -52,12 +60,16 @@ export class UsersController {
       _id: user._id,
       email: user.email,
       fullName: user.fullName || user.email,
+      defaultWorkspaceId: user.defaultWorkspaceId || null,
     };
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Get()
+  // Remove the Admin role restriction to allow any authenticated user to access user list
+  // @Roles('Admin')
   async getAllUsers() {
+    console.log('Getting all users for client request');
     const users = await this.usersService.getAllUsers();
     // Map to only return safe fields
     return users.map((user) => ({

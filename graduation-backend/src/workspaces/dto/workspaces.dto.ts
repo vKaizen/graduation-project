@@ -5,8 +5,22 @@ import {
   IsOptional,
   IsArray,
   IsMongoId,
+  IsEnum,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { Types } from 'mongoose';
+import { WorkspaceRole } from '../schema/workspaces.schema';
+
+export class WorkspaceMemberDto {
+  @IsNotEmpty()
+  @IsMongoId()
+  readonly userId: string;
+
+  @IsNotEmpty()
+  @IsEnum(['owner', 'admin', 'member'])
+  readonly role: WorkspaceRole;
+}
 
 export class CreateWorkspaceDto {
   @IsNotEmpty()
@@ -15,8 +29,9 @@ export class CreateWorkspaceDto {
 
   @IsOptional()
   @IsArray()
-  @IsMongoId({ each: true })
-  readonly members?: Types.ObjectId[];
+  @ValidateNested({ each: true })
+  @Type(() => WorkspaceMemberDto)
+  readonly members?: WorkspaceMemberDto[];
 }
 
 export class UpdateWorkspaceDto {
@@ -26,6 +41,23 @@ export class UpdateWorkspaceDto {
 
   @IsOptional()
   @IsArray()
-  @IsMongoId({ each: true })
-  readonly members?: Types.ObjectId[];
+  @ValidateNested({ each: true })
+  @Type(() => WorkspaceMemberDto)
+  readonly members?: WorkspaceMemberDto[];
+}
+
+export class AddMemberDto {
+  @IsNotEmpty()
+  @IsMongoId()
+  readonly userId: string;
+
+  @IsNotEmpty()
+  @IsEnum(['owner', 'admin', 'member'])
+  readonly role: WorkspaceRole;
+}
+
+export class UpdateMemberRoleDto {
+  @IsNotEmpty()
+  @IsEnum(['admin', 'member'])
+  readonly role: WorkspaceRole;
 }

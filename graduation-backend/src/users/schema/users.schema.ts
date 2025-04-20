@@ -1,34 +1,36 @@
 /* eslint-disable prettier/prettier */
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document } from 'mongoose';
+import { Document, Types } from 'mongoose';
 
 @Schema()
 export class User extends Document {
   @Prop({ required: true })
-  fullName: string;  // User's full name, reflecting Asana's user profile structure
+  fullName: string; // User's full name, reflecting Asana's user profile structure
 
   @Prop({ required: true, unique: true })
-  email: string;  // Email address for login and notifications
+  email: string; // Email address for login and notifications
 
   @Prop()
-  profilePictureUrl: string;  // URL of the user's profile picture
+  profilePictureUrl: string; // URL of the user's profile picture
 
   @Prop()
-  jobTitle: string;  // Job title, important in professional contexts
-    
+  jobTitle: string; // Job title, important in professional contexts
+
   @Prop({
-    type: String, 
-    default: "absalom"
+    type: String,
+    default: 'absalom',
   })
-  role: string;  // Role in the application, e.g., Admin, Member, Guest
+  role: string; // Role in the application, e.g., Admin, Member, Guest
 
   @Prop()
-  bio: string;  // About me section, providing a personal description or bio
+  bio: string; // About me section, providing a personal description or bio
 
   @Prop({ required: true })
-  password: string;  // Adding password field
+  password: string; // Adding password field
 
+  @Prop({ type: Types.ObjectId, ref: 'Workspace' })
+  defaultWorkspaceId: Types.ObjectId; // Reference to user's default workspace
 }
 
-export type UserDocument = User & Document
+export type UserDocument = User & Document;
 export const UserSchema = SchemaFactory.createForClass(User);
