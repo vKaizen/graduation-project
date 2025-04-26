@@ -11,6 +11,7 @@ import { TasksModule } from './tasks/tasks.module';
 import { CommentsModule } from './comments/comments.module';
 import { WorkspacesModule } from './workspaces/workspaces.module';
 import { ActivityLogsModule } from './activity-logs/activity-logs.module';
+import { PreferencesModule } from './preferences/preferences.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { ActivityLogsModule } from './activity-logs/activity-logs.module';
     CommentsModule,
     WorkspacesModule,
     ActivityLogsModule,
+    PreferencesModule,
   ],
   controllers: [AppController],
   providers: [],
