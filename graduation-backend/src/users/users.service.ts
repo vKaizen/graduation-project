@@ -5,7 +5,7 @@ import { Model, Types } from 'mongoose';
 import { User } from './schema/users.schema';
 import { CreateUserDto } from './dto/users.dto';
 import * as bcrypt from 'bcrypt';
-import { WorkspacesService } from 'src/workspaces/workspaces.service';
+import { WorkspacesService } from '../workspaces/workspaces.service';
 
 @Injectable()
 export class UsersService {
