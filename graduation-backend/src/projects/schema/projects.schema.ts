@@ -20,6 +20,13 @@ export class Project extends Document {
   })
   status: string;
 
+  @Prop({
+    type: String,
+    default: 'public',
+    enum: ['public', 'invite-only'],
+  })
+  visibility: string;
+
   @Prop({ type: Types.ObjectId, ref: 'Workspace', required: true })
   workspaceId: Types.ObjectId;
 

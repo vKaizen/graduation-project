@@ -15,6 +15,7 @@ import {
 } from './dto/projects.dto';
 import { ActivityLogsService } from '../activity-logs/activity-logs.service';
 import { WorkspacesService } from '../workspaces/workspaces.service';
+import { NotificationEventsService } from '../notifications/notification-events.service';
 
 // Interface for authenticated user
 interface AuthUser {
@@ -28,14 +29,22 @@ export class ProjectsService {
     @InjectModel(Project.name) private projectModel: Model<Project>,
     private readonly activityLogsService: ActivityLogsService,
     private readonly workspacesService: WorkspacesService,
+    private readonly notificationEventsService: NotificationEventsService,
   ) {}
 
   async createProject(
     createProjectDto: CreateProjectDto,
     authUser?: AuthUser,
   ): Promise<Project> {
-    const { name, description, color, status, ownerId, workspaceId } =
-      createProjectDto;
+    const {
+      name,
+      description,
+      color,
+      status,
+      ownerId,
+      workspaceId,
+      visibility,
+    } = createProjectDto;
 
     console.log(
       `Creating project with owner ${ownerId} in workspace ${workspaceId}`,
@@ -118,6 +127,7 @@ export class ProjectsService {
       description,
       color,
       status: status || 'on-track', // Set default status if not provided
+      visibility: visibility || 'public', // Set default visibility if not provided
       workspaceId: new Types.ObjectId(workspaceId),
       roles: [{ userId: new Types.ObjectId(ownerId), role: 'Owner' }],
       createdBy: new Types.ObjectId(ownerId),
@@ -181,27 +191,150 @@ export class ProjectsService {
       throw new BadRequestException('Invalid workspace ID');
     }
 
+    console.log(
+      `Finding projects for workspace ${workspaceId} and user ${userId}`,
+    );
+
     // Verify that the user has access to the workspace
     try {
-      await this.workspacesService.findById(workspaceId, userId);
+      const workspace = await this.workspacesService.findById(
+        workspaceId,
+        userId,
+      );
+
+      if (!workspace) {
+        console.log(
+          `User ${userId} does not have access to workspace ${workspaceId}`,
+        );
+        throw new ForbiddenException(
+          'You do not have access to this workspace',
+        );
+      }
+
+      console.log(`User ${userId} has access to workspace ${workspaceId}`);
+
+      // Check if user is workspace owner or admin (they can see all projects)
+      const isWorkspaceAdmin =
+        workspace.owner.toString() === userId ||
+        (Array.isArray(workspace.members) &&
+          workspace.members.some((m) => {
+            if (typeof m === 'object' && m.userId && m.role) {
+              return (
+                m.userId.toString() === userId &&
+                ['owner', 'admin'].includes(m.role.toLowerCase())
+              );
+            }
+            return false;
+          }));
+
+      console.log(`User ${userId} is workspace admin: ${isWorkspaceAdmin}`);
+
+      // Build the query based on visibility and user role
+      let query: {
+        workspaceId: Types.ObjectId;
+        $or?: Array<
+          { visibility: string } | { 'roles.userId': Types.ObjectId }
+        >;
+      } = { workspaceId: new Types.ObjectId(workspaceId) };
+
+      // If not an admin, only show public projects OR projects where user is a member
+      if (!isWorkspaceAdmin) {
+        query = {
+          workspaceId: new Types.ObjectId(workspaceId),
+          $or: [
+            { visibility: 'public' },
+            { 'roles.userId': new Types.ObjectId(userId) },
+          ],
+        };
+      }
+
+      console.log(`Using query: ${JSON.stringify(query)}`);
+
+      // Find matching projects
+      const queryWithTyping: {
+        $and: [
+          { workspaceId: Types.ObjectId },
+          {
+            $or: Array<
+              { visibility: string } | { 'roles.userId': Types.ObjectId }
+            >;
+          },
+        ];
+      } = {
+        $and: [
+          { workspaceId: new Types.ObjectId(workspaceId) },
+          {
+            $or: [
+              { visibility: 'public' },
+              { 'roles.userId': new Types.ObjectId(userId) },
+            ],
+          },
+        ],
+      };
+
+      const projects = await this.projectModel
+        .find(queryWithTyping)
+        .populate({
+          path: 'sections',
+          match: { _id: { $exists: true } },
+        })
+        .exec();
+
+      console.log(
+        `Found ${projects.length} projects in workspace ${workspaceId}`,
+      );
+
+      // Filter out null sections from each project and update user roles
+      const filteredProjects = projects.map((project) => {
+        // If project is public, add user to project roles if they're not already there
+        const userInRoles = project.roles.some(
+          (role) => role.userId.toString() === userId,
+        );
+
+        if (project.visibility === 'public' && !userInRoles) {
+          console.log(
+            `Adding user ${userId} to public project ${project._id} roles`,
+          );
+
+          // Update the database
+          this.projectModel
+            .findByIdAndUpdate(
+              project._id,
+              {
+                $push: {
+                  roles: {
+                    userId: new Types.ObjectId(userId),
+                    role: 'Member', // Default role for workspace members
+                  },
+                },
+              },
+              { new: true },
+            )
+            .exec()
+            .catch((err) => {
+              console.error(
+                `Failed to add user ${userId} to project ${project._id}: ${err.message}`,
+              );
+            });
+
+          // Update the in-memory object to be returned
+          project.roles.push({
+            userId: new Types.ObjectId(userId),
+            role: 'Member',
+          });
+        }
+
+        project.sections = project.sections.filter(
+          (section) => section !== null,
+        );
+        return project;
+      });
+
+      return filteredProjects;
     } catch (error) {
+      console.error(`Error in findProjectsByWorkspace: ${error.message}`);
       throw new ForbiddenException('You do not have access to this workspace');
     }
-
-    // Find all projects in the workspace
-    const projects = await this.projectModel
-      .find({ workspaceId: new Types.ObjectId(workspaceId) })
-      .populate({
-        path: 'sections',
-        match: { _id: { $exists: true } },
-      })
-      .exec();
-
-    // Filter out null sections from each project
-    return projects.map((project) => {
-      project.sections = project.sections.filter((section) => section !== null);
-      return project;
-    });
   }
 
   async getProjectById(id: string, userId: string): Promise<Project> {
@@ -234,22 +367,134 @@ export class ProjectsService {
       throw new NotFoundException(`Project with ID ${id} not found`);
     }
 
-    // Verify that the user has access to the workspace that contains this project
+    // Check if the user has direct access to the project via roles
+    let hasDirectProjectAccess = project.roles.some((role) => {
+      const roleMatch = role.userId.toString() === userId;
+      if (roleMatch) {
+        console.log(
+          `User ${userId} has direct access to project ${id} with role: ${role.role}`,
+        );
+      }
+      return roleMatch;
+    });
+
+    // Check if the user has access to the workspace
+    let hasWorkspaceAccess = false;
+    let isWorkspaceAdmin = false;
+
     try {
-      await this.workspacesService.findById(
+      const workspace = await this.workspacesService.findById(
         project.workspaceId.toString(),
         userId,
       );
+
+      if (workspace) {
+        console.log(
+          `User ${userId} has access to workspace ${project.workspaceId}`,
+        );
+        hasWorkspaceAccess = true;
+
+        // Check if user is workspace owner or admin
+        isWorkspaceAdmin =
+          workspace.owner.toString() === userId ||
+          (Array.isArray(workspace.members) &&
+            workspace.members.some((m) => {
+              if (typeof m === 'object' && m.userId && m.role) {
+                return (
+                  m.userId.toString() === userId &&
+                  ['owner', 'admin'].includes(m.role.toLowerCase())
+                );
+              }
+              return false;
+            }));
+
+        console.log(`User ${userId} is workspace admin: ${isWorkspaceAdmin}`);
+
+        // For public projects, add workspace members to project roles if not already there
+        if (project.visibility === 'public' && !hasDirectProjectAccess) {
+          console.log(
+            `Adding user ${userId} to public project ${id} roles as they have workspace access`,
+          );
+
+          // Add the user to the project roles
+          await this.projectModel.findByIdAndUpdate(
+            id,
+            {
+              $push: {
+                roles: {
+                  userId: new Types.ObjectId(userId),
+                  role: 'Member', // Default role for workspace members
+                },
+              },
+            },
+            { new: true },
+          );
+
+          // Update the project object with the new role
+          project.roles.push({
+            userId: new Types.ObjectId(userId),
+            role: 'Member',
+          });
+
+          // Now they have direct access
+          hasDirectProjectAccess = true;
+        }
+      }
     } catch (error) {
-      throw new ForbiddenException('You do not have access to this workspace');
+      console.log(
+        `User ${userId} does not have access to workspace ${project.workspaceId}: ${error.message}`,
+      );
+      hasWorkspaceAccess = false;
     }
 
-    // Also check if the user has access to the project itself
-    const hasAccess = project.roles.some((role) => {
-      return role.userId.toString() === userId;
-    });
+    // Build permission check logic
+    let hasAccess = false;
 
+    // Case 1: User has direct project access (they are in project.roles)
+    if (hasDirectProjectAccess) {
+      hasAccess = true;
+    }
+    // Case 2: User is workspace admin (owner or admin) - they can see all projects
+    else if (isWorkspaceAdmin) {
+      hasAccess = true;
+
+      // Add admin to project roles for convenience
+      console.log(`Adding workspace admin ${userId} to project ${id} roles`);
+      await this.projectModel
+        .findByIdAndUpdate(
+          id,
+          {
+            $push: {
+              roles: {
+                userId: new Types.ObjectId(userId),
+                role: 'Admin', // Workspace admins get Admin role in projects
+              },
+            },
+          },
+          { new: true },
+        )
+        .catch((error) => {
+          console.error(
+            `Failed to add admin to project roles: ${error.message}`,
+          );
+        });
+
+      // Update the project object
+      project.roles.push({
+        userId: new Types.ObjectId(userId),
+        role: 'Admin',
+      });
+    }
+    // Case 3: Project is public AND user has workspace access
+    else if (project.visibility === 'public' && hasWorkspaceAccess) {
+      hasAccess = true;
+    }
+
+    // Reject if no access
     if (!hasAccess) {
+      console.log(
+        `Access denied: User ${userId} has no access to project ${id} (visibility: ${project.visibility})`,
+      );
       throw new ForbiddenException(
         `User does not have access to project ${id}`,
       );
@@ -267,21 +512,52 @@ export class ProjectsService {
     userId: string,
     authUser?: AuthUser,
   ): Promise<Project> {
-    // First, get the project to validate access
+    if (!Types.ObjectId.isValid(projectId)) {
+      throw new BadRequestException('Invalid project ID');
+    }
+
+    // Find project and verify user access
     const project = await this.getProjectById(projectId, userId);
+    if (!project) {
+      throw new NotFoundException(`Project with ID ${projectId} not found`);
+    }
 
-    // Update status
-    project.status = updateStatusDto.status;
-    const updatedProject = await project.save();
+    // Store original status for notification
+    const oldStatus = project.status || 'No status';
+    const newStatus = updateStatusDto.status;
 
-    // Log status update
-    if (authUser) {
-      await this.activityLogsService.createLog({
-        projectId,
-        type: 'updated',
-        content: `Updated project status to ${updateStatusDto.status}`,
-        user: authUser,
-      });
+    // Update project status
+    const updatedProject = await this.projectModel
+      .findByIdAndUpdate(projectId, { status: newStatus }, { new: true })
+      .exec();
+
+    // Log project status update
+    await this.activityLogsService.createLog({
+      projectId,
+      type: 'updated',
+      content: `Changed project status from ${oldStatus} to ${newStatus}`,
+      user: authUser,
+    });
+
+    // Send notifications to project members about the status update
+    if (project.roles && authUser) {
+      // Get all project members except the updater
+      const projectMembers = project.roles
+        .filter((role) => role.userId.toString() !== userId)
+        .map((role) => role.userId.toString());
+
+      // Send notifications to each member
+      for (const memberId of projectMembers) {
+        await this.notificationEventsService.onProjectStatusChanged(
+          memberId,
+          userId,
+          authUser.name || 'A team member',
+          projectId,
+          project.name,
+          oldStatus,
+          newStatus,
+        );
+      }
     }
 
     return updatedProject;
@@ -293,21 +569,47 @@ export class ProjectsService {
     userId: string,
     authUser?: AuthUser,
   ): Promise<Project> {
-    // First, get the project to validate access
+    if (!Types.ObjectId.isValid(projectId)) {
+      throw new BadRequestException('Invalid project ID');
+    }
+
+    // Find project and verify user access
     const project = await this.getProjectById(projectId, userId);
+    if (!project) {
+      throw new NotFoundException(`Project with ID ${projectId} not found`);
+    }
 
-    // Update description
-    project.description = description;
-    const updatedProject = await project.save();
+    // Update project description
+    const updatedProject = await this.projectModel
+      .findByIdAndUpdate(projectId, { description }, { new: true })
+      .exec();
 
-    // Log description update
-    if (authUser) {
-      await this.activityLogsService.createLog({
-        projectId,
-        type: 'updated',
-        content: 'Updated project description',
-        user: authUser,
-      });
+    // Log project description update
+    await this.activityLogsService.createLog({
+      projectId,
+      type: 'updated',
+      content: 'Updated project description',
+      user: authUser,
+    });
+
+    // Send notifications to project members about the description update
+    if (project.roles && authUser) {
+      // Get all project members except the updater
+      const projectMembers = project.roles
+        .filter((role) => role.userId.toString() !== userId)
+        .map((role) => role.userId.toString());
+
+      // Send notifications to each member
+      for (const memberId of projectMembers) {
+        await this.notificationEventsService.onProjectUpdated(
+          memberId,
+          userId,
+          authUser.name || 'A team member',
+          projectId,
+          project.name,
+          'updated the description',
+        );
+      }
     }
 
     return updatedProject;
@@ -319,35 +621,94 @@ export class ProjectsService {
     userId: string,
     authUser?: AuthUser,
   ): Promise<Project> {
-    // First, get the project to validate access
-    const project = await this.getProjectById(projectId, userId);
-
-    // Check if user is already a member
-    const existingMember = project.roles.find(
-      (role) => role.userId.toString() === memberData.userId,
-    );
-
-    if (existingMember) {
-      // If user is already a member, just update the role
-      existingMember.role = memberData.role;
-    } else {
-      // Otherwise, add the new member
-      project.roles.push({
-        userId: new Types.ObjectId(memberData.userId),
-        role: memberData.role,
-      });
+    if (!Types.ObjectId.isValid(projectId)) {
+      throw new BadRequestException('Invalid project ID');
     }
 
-    const updatedProject = await project.save();
+    if (!Types.ObjectId.isValid(memberData.userId)) {
+      throw new BadRequestException('Invalid member user ID');
+    }
 
-    // Log member addition
-    if (authUser) {
-      await this.activityLogsService.createLog({
+    // Find project and verify user access
+    const project = await this.getProjectById(projectId, userId);
+    if (!project) {
+      throw new NotFoundException(`Project with ID ${projectId} not found`);
+    }
+
+    // Check if the user is already a member
+    const isMember = project.roles.some(
+      (r) => r.userId.toString() === memberData.userId,
+    );
+    if (isMember) {
+      throw new BadRequestException('User is already a member of this project');
+    }
+
+    // Add the member
+    const updatedProject = await this.projectModel
+      .findByIdAndUpdate(
         projectId,
-        type: 'updated',
-        content: `Added or updated member with role ${memberData.role}`,
-        user: authUser,
-      });
+        {
+          $push: {
+            roles: {
+              userId: new Types.ObjectId(memberData.userId),
+              role: memberData.role || 'Member',
+            },
+          },
+        },
+        { new: true },
+      )
+      .exec();
+
+    // Log adding a member
+    await this.activityLogsService.createLog({
+      projectId,
+      type: 'updated',
+      content: `Added ${memberData.userName || memberData.userId} as ${
+        memberData.role || 'Member'
+      }`,
+      user: authUser,
+    });
+
+    // Get the new member's name
+    const memberName = memberData.userName || 'A new member';
+    const memberRole = memberData.role || 'Member';
+
+    // Send notification to the new member
+    if (authUser) {
+      await this.notificationEventsService.onMemberAdded(
+        memberData.userId,
+        userId,
+        authUser.name || 'A team member',
+        projectId,
+        project.name,
+        'project',
+        memberRole,
+      );
+    }
+
+    // Send notifications to existing project members about the new addition
+    if (project.roles && authUser) {
+      // Get all project members except the updater and the new member
+      const projectMembers = project.roles
+        .filter(
+          (role) =>
+            role.userId.toString() !== userId &&
+            role.userId.toString() !== memberData.userId,
+        )
+        .map((role) => role.userId.toString());
+
+      // Send notifications to each existing member
+      for (const memberId of projectMembers) {
+        await this.notificationEventsService.onProjectStatusChanged(
+          memberId,
+          userId,
+          authUser.name || 'A team member',
+          projectId,
+          project.name,
+          'Members list',
+          `Members list with ${memberName} added as ${memberRole}`,
+        );
+      }
     }
 
     return updatedProject;
@@ -363,5 +724,71 @@ export class ProjectsService {
 
     // Use the activity logs service to get real logs
     return this.activityLogsService.getLogsByProjectId(projectId);
+  }
+
+  async updateProjectVisibility(
+    projectId: string,
+    visibilityData: { visibility: string },
+    userId: string,
+    authUser?: AuthUser,
+  ): Promise<Project> {
+    if (!Types.ObjectId.isValid(projectId)) {
+      throw new BadRequestException('Invalid project ID');
+    }
+
+    // Find project and verify user access
+    const project = await this.getProjectById(projectId, userId);
+    if (!project) {
+      throw new NotFoundException(`Project with ID ${projectId} not found`);
+    }
+
+    // Check if user has permission to update visibility (only admin or owner)
+    const userRole = project.roles.find(
+      (role) => role.userId.toString() === userId,
+    )?.role;
+    if (!userRole || !['Owner', 'Admin'].includes(userRole)) {
+      throw new ForbiddenException(
+        'Only project owners and admins can change project visibility',
+      );
+    }
+
+    // Update project visibility
+    const updatedProject = await this.projectModel
+      .findByIdAndUpdate(
+        projectId,
+        { visibility: visibilityData.visibility },
+        { new: true },
+      )
+      .exec();
+
+    // Log project visibility update
+    await this.activityLogsService.createLog({
+      projectId,
+      type: 'updated',
+      content: `Changed project visibility to: ${visibilityData.visibility}`,
+      user: authUser,
+    });
+
+    // Send notifications to project members about the visibility update
+    if (project.roles && authUser) {
+      // Get all project members except the updater
+      const projectMembers = project.roles
+        .filter((role) => role.userId.toString() !== userId)
+        .map((role) => role.userId.toString());
+
+      // Send notifications to each member
+      for (const memberId of projectMembers) {
+        await this.notificationEventsService.onProjectUpdated(
+          memberId,
+          userId,
+          authUser.name || 'A team member',
+          projectId,
+          project.name,
+          `updated the visibility to ${visibilityData.visibility}`,
+        );
+      }
+    }
+
+    return updatedProject;
   }
 }

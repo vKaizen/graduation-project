@@ -31,6 +31,13 @@ export class CreateProjectDto {
   })
   status?: string;
 
+  @IsString()
+  @IsOptional()
+  @IsIn(['public', 'invite-only'], {
+    message: 'Visibility must be either public or invite-only',
+  })
+  visibility?: string;
+
   @IsMongoId()
   @IsNotEmpty()
   workspaceId: string;
@@ -46,6 +53,10 @@ export class AddMemberDto {
     message: 'Role must be one of Owner, Member, or Admin',
   })
   role: string;
+
+  @IsString()
+  @IsOptional()
+  userName?: string;
 }
 
 export class UpdateProjectStatusDto {
@@ -61,4 +72,13 @@ export class UpdateProjectDescriptionDto {
   @IsString()
   @IsNotEmpty()
   description: string;
+}
+
+export class UpdateProjectVisibilityDto {
+  @IsString()
+  @IsNotEmpty()
+  @IsIn(['public', 'invite-only'], {
+    message: 'Visibility must be either public or invite-only',
+  })
+  visibility: string;
 }

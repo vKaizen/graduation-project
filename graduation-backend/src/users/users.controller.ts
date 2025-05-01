@@ -16,6 +16,7 @@ import { AuthService } from 'src/auth/auth.service';
 import { RolesGuard } from 'src/auth/guards/roles.guard'; // Verify path correctness
 import { Roles } from 'src/auth/decorators/roles.decorator';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
+import { Request } from '@nestjs/common';
 
 @Controller('users')
 export class UsersController {
@@ -71,6 +72,31 @@ export class UsersController {
   async getAllUsers() {
     console.log('Getting all users for client request');
     const users = await this.usersService.getAllUsers();
+    // Map to only return safe fields
+    return users.map((user) => ({
+      _id: user._id,
+      email: user.email,
+      fullName: user.fullName || user.email,
+    }));
+  }
+
+  // New endpoint to fetch multiple users by IDs in a single request
+  @UseGuards(JwtAuthGuard)
+  @Post('batch')
+  async getUsersByIds(@Body() data: { userIds: string[] }) {
+    console.log('Batch fetching users with IDs:', data.userIds);
+
+    if (
+      !data.userIds ||
+      !Array.isArray(data.userIds) ||
+      data.userIds.length === 0
+    ) {
+      return [];
+    }
+
+    // Get users by their IDs
+    const users = await this.usersService.getUsersByIds(data.userIds);
+
     // Map to only return safe fields
     return users.map((user) => ({
       _id: user._id,

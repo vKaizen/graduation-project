@@ -8,6 +8,7 @@ import { AuthModule } from '../auth/auth.module';
 import { Project, ProjectSchema } from '../projects/schema/projects.schema';
 import { Task, TaskSchema } from '../tasks/schema/tasks.schema';
 import { UsersModule } from '../users/users.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { UsersModule } from '../users/users.module';
       { name: Task.name, schema: TaskSchema },
     ]),
     forwardRef(() => UsersModule),
+    NotificationsModule,
   ],
   controllers: [WorkspacesController],
   providers: [WorkspacesService],

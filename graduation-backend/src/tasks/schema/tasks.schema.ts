@@ -51,6 +51,12 @@ export class Task extends Document {
 
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   createdBy: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  updatedBy: Types.ObjectId;
+
+  @Prop({ type: String })
+  updatedByName: string;
 }
 
 export const TaskSchema = SchemaFactory.createForClass(Task);

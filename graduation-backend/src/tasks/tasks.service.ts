@@ -7,12 +7,14 @@ import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/updateTask.dto';
 import { Section } from '../sections/schema/sections.schema';
 import { CreatePersonalTaskDto } from './dto/create-personal-task.dto';
+import { NotificationEventsService } from '../notifications/notification-events.service';
 
 @Injectable()
 export class TasksService {
   constructor(
     @InjectModel(Task.name) private taskModel: Model<Task>,
     @InjectModel(Section.name) private sectionModel: Model<Section>,
+    private notificationEventsService: NotificationEventsService,
   ) {}
 
   async createTask(createTaskDto: CreateTaskDto): Promise<Task> {
@@ -56,9 +58,107 @@ export class TasksService {
   }
 
   async updateTask(id: string, updateTaskDto: UpdateTaskDto): Promise<Task> {
-    return this.taskModel
-      .findByIdAndUpdate(id, updateTaskDto, { new: true })
-      .exec();
+    try {
+      const originalTask = await this.taskModel.findById(id).exec();
+      console.log('Original task:', JSON.stringify(originalTask));
+      console.log('Update DTO:', JSON.stringify(updateTaskDto));
+
+      // Capture original assignee for comparison
+      const originalAssigneeId = originalTask?.assignee?.toString();
+      const wasCompleted = originalTask?.status === 'completed';
+
+      const updatedTask = await this.taskModel
+        .findByIdAndUpdate(id, updateTaskDto, { new: true })
+        .exec();
+
+      console.log('Updated task:', JSON.stringify(updatedTask));
+
+      // Handle task assignment notification
+      if (
+        updateTaskDto.assignee &&
+        originalAssigneeId !== updateTaskDto.assignee.toString() &&
+        updateTaskDto.updatedBy
+      ) {
+        console.log('Sending task assignment notification');
+        console.log(
+          `Assignee changed from ${originalAssigneeId} to ${updateTaskDto.assignee.toString()}`,
+        );
+        console.log(`Updated by: ${updateTaskDto.updatedBy.toString()}`);
+
+        try {
+          // Get project details for the notification
+          const task = await this.taskModel
+            .findById(id)
+            .populate('project')
+            .exec();
+          console.log('Populated task:', JSON.stringify(task));
+
+          if (!task.project) {
+            console.error('Project data not found for task:', id);
+            return updatedTask;
+          }
+
+          const projectName = task.project['name'];
+          console.log('Project name:', projectName);
+
+          // Send task assignment notification
+          await this.notificationEventsService.onTaskAssigned(
+            updateTaskDto.assignee.toString(),
+            updateTaskDto.updatedBy.toString(),
+            updateTaskDto.updatedByName || 'A team member',
+            id,
+            updatedTask.title,
+            task.project._id.toString(),
+            projectName,
+          );
+          console.log('Task assignment notification sent successfully');
+        } catch (error) {
+          console.error('Failed to send task assignment notification:', error);
+        }
+      } else {
+        console.log('Conditions for task assignment notification not met:');
+        console.log(`Has assignee: ${!!updateTaskDto.assignee}`);
+        console.log(
+          `Different assignee: ${originalAssigneeId !== (updateTaskDto.assignee?.toString() || 'undefined')}`,
+        );
+        console.log(`Has updatedBy: ${!!updateTaskDto.updatedBy}`);
+      }
+
+      // Handle task completion notification
+      if (
+        !wasCompleted &&
+        updatedTask.status === 'completed' &&
+        updatedTask.createdBy &&
+        updatedTask.updatedBy
+      ) {
+        // Only notify if the completer is different from the creator
+        if (
+          updatedTask.createdBy.toString() !== updatedTask.updatedBy.toString()
+        ) {
+          // Get project details for the notification
+          const task = await this.taskModel
+            .findById(id)
+            .populate('project')
+            .exec();
+          const projectName = task.project['name'];
+
+          await this.notificationEventsService.onTaskCompleted(
+            updatedTask.createdBy.toString(),
+            updatedTask.updatedBy.toString(),
+            updatedTask.updatedByName || 'A team member',
+            id,
+            updatedTask.title,
+            task.project._id.toString(),
+            projectName,
+          );
+        }
+      }
+
+      return updatedTask;
+    } catch (error) {
+      console.error('Error in updateTask:', error);
+      throw error;
+    }
   }
 
   async deleteTask(id: string): Promise<Task> {

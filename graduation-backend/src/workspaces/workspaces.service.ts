@@ -18,6 +18,7 @@ import {
 } from './dto/workspaces.dto';
 import { Project } from '../projects/schema/projects.schema';
 import { Task } from '../tasks/schema/tasks.schema';
+import { NotificationEventsService } from '../notifications/notification-events.service';
 
 @Injectable()
 export class WorkspacesService {
@@ -25,6 +26,7 @@ export class WorkspacesService {
     @InjectModel(Workspace.name) private workspaceModel: Model<Workspace>,
     @InjectModel(Project.name) private projectModel: Model<Project>,
     @InjectModel(Task.name) private taskModel: Model<Task>,
+    private readonly notificationEventsService: NotificationEventsService,
   ) {}
 
   async findAll(userId: string): Promise<Workspace[]> {
@@ -356,6 +358,15 @@ export class WorkspacesService {
       return workspace; // Member already exists, return as is
     }
 
+    // Get user info for notifications
+    let adderName = 'A workspace admin';
+    try {
+      // Try to look up the user making the request for better notification
+      // This would require injecting the UsersService, so we'll use a default value for now
+    } catch (error) {
+      console.error('Could not get user info for notification:', error);
+    }
+
     // Add member using the appropriate structure based on what we have
     if (isNewStructure) {
       // Use new structure
@@ -388,7 +399,26 @@ export class WorkspacesService {
       workspace.members = newMembers;
     }
 
-    return workspace.save();
+    // Save the workspace first
+    const savedWorkspace = await workspace.save();
+
+    // Send notification to the new member
+    try {
+      await this.notificationEventsService.onMemberAdded(
+        memberId,
+        userId,
+        adderName,
+        workspaceId,
+        workspace.name,
+        'workspace',
+        role,
+      );
+    } catch (error) {
+      console.error('Failed to send member added notification:', error);
+      // Don't fail the request if notification fails
+    }
+
+    return savedWorkspace;
   }
 
   async updateMemberRole(

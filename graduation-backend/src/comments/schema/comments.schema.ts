@@ -10,6 +10,9 @@ export class Comment extends Document {
 
   @Prop({ type: Types.ObjectId, ref: 'User' })
   author: Types.ObjectId;  // The user who created the comment
+  
+  @Prop({ type: String })
+  authorName: string;  // The name of the user who created the comment
 
   @Prop({ type: Types.ObjectId, ref: 'Task' })
   task: Types.ObjectId;  // The task to which this comment belongs

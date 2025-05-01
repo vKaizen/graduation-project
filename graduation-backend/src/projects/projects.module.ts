@@ -11,6 +11,7 @@ import { SectionsModule } from '../sections/sections.module';
 import { AuthModule } from 'src/auth/auth.module';
 import { ActivityLogsModule } from '../activity-logs/activity-logs.module';
 import { WorkspacesModule } from '../workspaces/workspaces.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { WorkspacesModule } from '../workspaces/workspaces.module';
     AuthModule,
     ActivityLogsModule, // Import the ActivityLogs module
     WorkspacesModule, // Import the Workspaces module
+    NotificationsModule, // Import the Notifications module
   ],
   controllers: [ProjectsController, WorkspaceProjectsController],
   providers: [ProjectsService],

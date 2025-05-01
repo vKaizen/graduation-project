@@ -18,6 +18,7 @@ import {
   AddMemberDto,
   UpdateProjectStatusDto,
   UpdateProjectDescriptionDto,
+  UpdateProjectVisibilityDto,
 } from './dto/projects.dto';
 import { Project } from './schema/projects.schema';
 import { AuthService } from 'src/auth/auth.service';
@@ -148,6 +149,25 @@ export class ProjectsController {
       );
       throw error;
     }
+  }
+
+  @Patch(':id/visibility')
+  async updateProjectVisibility(
+    @Param('id') id: string,
+    @Body() visibilityDto: UpdateProjectVisibilityDto,
+    @Request() req,
+  ): Promise<Project> {
+    const authUser = {
+      userId: req.user.userId,
+      name: req.user.username || 'Unknown User',
+    };
+
+    return this.projectsService.updateProjectVisibility(
+      id,
+      visibilityDto,
+      req.user.userId,
+      authUser,
+    );
   }
 }
 

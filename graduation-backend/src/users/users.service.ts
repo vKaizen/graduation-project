@@ -96,4 +96,27 @@ export class UsersService {
   async getAllUsers(): Promise<User[]> {
     return this.userModel.find().exec();
   }
+
+  async getUsersByIds(userIds: string[]): Promise<User[]> {
+    console.log(`Fetching ${userIds.length} users by IDs`);
+
+    // Filter out invalid ObjectIds to prevent DB errors
+    const validUserIds = userIds.filter((id) => Types.ObjectId.isValid(id));
+
+    if (validUserIds.length === 0) {
+      return [];
+    }
+
+    // Convert string IDs to ObjectId
+    const objectIds = validUserIds.map((id) => new Types.ObjectId(id));
+
+    // Fetch users in a single query
+    const users = await this.userModel.find({ _id: { $in: objectIds } }).exec();
+
+    console.log(
+      `Found ${users.length} users out of ${userIds.length} requested IDs`,
+    );
+
+    return users;
+  }
 }
