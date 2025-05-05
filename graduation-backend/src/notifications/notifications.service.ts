@@ -14,23 +14,37 @@ export class NotificationsService {
   async create(
     createNotificationDto: CreateNotificationDto,
   ): Promise<Notification> {
-    console.log('Creating notification:', createNotificationDto);
-    const newNotification = new this.notificationModel({
-      ...createNotificationDto,
-      read: false,
-    });
-
-    const savedNotification = await newNotification.save();
     console.log(
-      'Saved notification with ID:',
-      savedNotification._id.toString(),
-    );
-    console.log(
-      'Notification saved for user ID:',
-      savedNotification.userId.toString(),
+      '🔍 [NOTIFICATIONS-SERVICE] Creating notification:',
+      JSON.stringify(createNotificationDto, null, 2),
     );
 
-    return savedNotification;
+    try {
+      const newNotification = new this.notificationModel({
+        ...createNotificationDto,
+        read: false,
+      });
+
+      const savedNotification = await newNotification.save();
+      console.log(
+        '✅ [NOTIFICATIONS-SERVICE] Saved notification with ID:',
+        savedNotification._id.toString(),
+      );
+      console.log(
+        '✅ [NOTIFICATIONS-SERVICE] Notification saved for user ID:',
+        savedNotification.userId.toString(),
+      );
+
+      return savedNotification;
+    } catch (error) {
+      console.error(
+        '🚫 [NOTIFICATIONS-SERVICE] Failed to save notification:',
+        error,
+      );
+      console.error('🚫 [NOTIFICATIONS-SERVICE] Error details:', error.message);
+      console.error('🚫 [NOTIFICATIONS-SERVICE] Error stack:', error.stack);
+      throw error;
+    }
   }
 
   async findAllForUser(userId: string): Promise<Notification[]> {

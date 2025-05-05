@@ -79,11 +79,17 @@ export class TasksService {
         originalAssigneeId !== updateTaskDto.assignee.toString() &&
         updateTaskDto.updatedBy
       ) {
-        console.log('Sending task assignment notification');
         console.log(
-          `Assignee changed from ${originalAssigneeId} to ${updateTaskDto.assignee.toString()}`,
+          '🔍 [NOTIFICATION DEBUG] Condition passed for task assignment notification',
         );
-        console.log(`Updated by: ${updateTaskDto.updatedBy.toString()}`);
+        console.log('🔍 Original assignee ID:', originalAssigneeId);
+        console.log('🔍 New assignee ID:', updateTaskDto.assignee.toString());
+        console.log('🔍 Updated by:', updateTaskDto.updatedBy.toString());
+        console.log(
+          '🔍 Updated by name:',
+          updateTaskDto.updatedByName || 'Not provided',
+        );
+        console.log('🔍 Update DTO properties:', Object.keys(updateTaskDto));
 
         try {
           // Get project details for the notification
@@ -91,17 +97,30 @@ export class TasksService {
             .findById(id)
             .populate('project')
             .exec();
-          console.log('Populated task:', JSON.stringify(task));
+          console.log(
+            '🔍 Populated task project:',
+            task.project ? 'Found' : 'Not found',
+          );
 
           if (!task.project) {
-            console.error('Project data not found for task:', id);
+            console.error('🚫 Project data not found for task:', id);
             return updatedTask;
           }
 
           const projectName = task.project['name'];
-          console.log('Project name:', projectName);
+          console.log('🔍 Project name:', projectName);
 
           // Send task assignment notification
+          console.log('🔍 Calling notification service with params:', {
+            assigneeId: updateTaskDto.assignee.toString(),
+            updatedById: updateTaskDto.updatedBy.toString(),
+            updatedByName: updateTaskDto.updatedByName || 'A team member',
+            taskId: id,
+            taskTitle: updatedTask.title,
+            projectId: task.project._id.toString(),
+            projectName,
+          });
+
           await this.notificationEventsService.onTaskAssigned(
             updateTaskDto.assignee.toString(),
             updateTaskDto.updatedBy.toString(),
@@ -111,17 +130,39 @@ export class TasksService {
             task.project._id.toString(),
             projectName,
           );
-          console.log('Task assignment notification sent successfully');
+          console.log('✅ Task assignment notification sent successfully');
         } catch (error) {
-          console.error('Failed to send task assignment notification:', error);
+          console.error(
+            '🚫 Failed to send task assignment notification:',
+            error,
+          );
+          console.error('🚫 Error details:', error.message);
+          console.error('🚫 Error stack:', error.stack);
+          // Continue execution - don't let notification errors break task updates
         }
       } else {
-        console.log('Conditions for task assignment notification not met:');
-        console.log(`Has assignee: ${!!updateTaskDto.assignee}`);
         console.log(
-          `Different assignee: ${originalAssigneeId !== (updateTaskDto.assignee?.toString() || 'undefined')}`,
+          '🔍 [NOTIFICATION DEBUG] Conditions for task assignment notification NOT met:',
         );
-        console.log(`Has updatedBy: ${!!updateTaskDto.updatedBy}`);
+        console.log('🔍 Task ID:', id);
+        console.log('🔍 Has assignee:', !!updateTaskDto.assignee);
+        if (updateTaskDto.assignee) {
+          console.log('🔍 New assignee ID:', updateTaskDto.assignee.toString());
+        }
+        console.log('🔍 Original assignee ID:', originalAssigneeId);
+        console.log(
+          '🔍 Different assignee:',
+          originalAssigneeId !==
+            (updateTaskDto.assignee?.toString() || 'undefined'),
+        );
+        console.log('🔍 Has updatedBy:', !!updateTaskDto.updatedBy);
+        if (updateTaskDto.updatedBy) {
+          console.log(
+            '🔍 UpdatedBy value:',
+            updateTaskDto.updatedBy.toString(),
+          );
+        }
+        console.log('🔍 UpdateTaskDto keys:', Object.keys(updateTaskDto));
       }
 
       // Handle task completion notification
@@ -135,28 +176,40 @@ export class TasksService {
         if (
           updatedTask.createdBy.toString() !== updatedTask.updatedBy.toString()
         ) {
-          // Get project details for the notification
-          const task = await this.taskModel
-            .findById(id)
-            .populate('project')
-            .exec();
-          const projectName = task.project['name'];
+          try {
+            // Get project details for the notification
+            const task = await this.taskModel
+              .findById(id)
+              .populate('project')
+              .exec();
+            const projectName = task.project['name'];
 
-          await this.notificationEventsService.onTaskCompleted(
-            updatedTask.createdBy.toString(),
-            updatedTask.updatedBy.toString(),
-            updatedTask.updatedByName || 'A team member',
-            id,
-            updatedTask.title,
-            task.project._id.toString(),
-            projectName,
-          );
+            await this.notificationEventsService.onTaskCompleted(
+              updatedTask.createdBy.toString(),
+              updatedTask.updatedBy.toString(),
+              updatedTask.updatedByName || 'A team member',
+              id,
+              updatedTask.title,
+              task.project._id.toString(),
+              projectName,
+            );
+            console.log('✅ Task completion notification sent successfully');
+          } catch (error) {
+            console.error(
+              '🚫 Failed to send task completion notification:',
+              error,
+            );
+            console.error('🚫 Error details:', error.message);
+            // Continue execution - don't let notification errors break task updates
+          }
         }
       }
 
       return updatedTask;
     } catch (error) {
-      console.error('Error in updateTask:', error);
+      console.error('🚫 Error in updateTask:', error);
+      console.error('🚫 Error details:', error.message);
+      console.error('🚫 Error stack:', error.stack);
       throw error;
     }
   }

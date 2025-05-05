@@ -110,20 +110,44 @@ export class NotificationEventsService {
     projectId: string,
     projectName: string,
   ) {
-    await this.notificationsService.create({
+    console.log('🔍 [NOTIFICATION-EVENTS] onTaskAssigned called with:', {
       userId,
-      type: 'task_assigned',
-      title: 'New Task Assigned',
-      message: `${assignerName} has assigned you the task "${taskTitle}"`,
-      metadata: {
-        taskId,
-        taskTitle,
-        projectId,
-        projectName,
-        assignerId,
-        assignerName,
-      },
+      assignerId,
+      assignerName,
+      taskId,
+      taskTitle,
+      projectId,
+      projectName,
     });
+
+    try {
+      await this.notificationsService.create({
+        userId,
+        type: 'task_assigned',
+        title: 'New Task Assigned',
+        message: `${assignerName} has assigned you the task "${taskTitle}"`,
+        metadata: {
+          taskId,
+          taskTitle,
+          projectId,
+          projectName,
+          assignerId,
+          assignerName,
+        },
+      });
+      console.log(
+        '✅ [NOTIFICATION-EVENTS] Successfully created task_assigned notification for user:',
+        userId,
+      );
+    } catch (error) {
+      console.error(
+        '🚫 [NOTIFICATION-EVENTS] Failed to create task_assigned notification:',
+        error,
+      );
+      console.error('🚫 [NOTIFICATION-EVENTS] Error details:', error.message);
+      console.error('🚫 [NOTIFICATION-EVENTS] Error stack:', error.stack);
+      throw error; // Re-throw to allow proper error handling upstream
+    }
   }
 
   /**
