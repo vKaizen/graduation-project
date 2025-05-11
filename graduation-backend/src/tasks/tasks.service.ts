@@ -67,6 +67,40 @@ export class TasksService {
       const originalAssigneeId = originalTask?.assignee?.toString();
       const wasCompleted = originalTask?.status === 'completed';
 
+      // Check if task is being marked as completed through status or completed field
+      if (
+        (updateTaskDto.status === 'completed' && !wasCompleted) ||
+        (updateTaskDto.completed === true && !wasCompleted)
+      ) {
+        // Set completedAt timestamp
+        const completedDate = new Date();
+        updateTaskDto['completedAt'] = completedDate;
+        // Also ensure status is set to completed if only the completed field was updated
+        if (updateTaskDto.completed === true && !updateTaskDto.status) {
+          updateTaskDto.status = 'completed';
+        }
+        console.log('Task marked as completed, setting completedAt timestamp');
+        console.log('Completion timestamp:', completedDate.toISOString());
+        console.log('Completion date components:', {
+          year: completedDate.getFullYear(),
+          month: completedDate.getMonth() + 1,
+          day: completedDate.getDate(),
+          hours: completedDate.getHours(),
+          minutes: completedDate.getMinutes(),
+        });
+      } else if (
+        (updateTaskDto.status &&
+          updateTaskDto.status !== 'completed' &&
+          wasCompleted) ||
+        (updateTaskDto.completed === false && wasCompleted)
+      ) {
+        // If task was completed but now is being marked as not completed
+        updateTaskDto['completedAt'] = null;
+        console.log(
+          'Task unmarked as completed, clearing completedAt timestamp',
+        );
+      }
+
       const updatedTask = await this.taskModel
         .findByIdAndUpdate(id, updateTaskDto, { new: true })
         .exec();

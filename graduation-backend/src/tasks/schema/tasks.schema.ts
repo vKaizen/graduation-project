@@ -19,6 +19,12 @@ export class Task extends Document {
   })
   status: string;
 
+  @Prop({ type: Boolean, default: false })
+  completed: boolean;
+
+  @Prop({ type: Date, default: null })
+  completedAt: Date;
+
   @Prop({ type: Types.ObjectId, ref: 'User' })
   assignee: Types.ObjectId[];
 
@@ -60,3 +66,18 @@ export class Task extends Document {
 }
 
 export const TaskSchema = SchemaFactory.createForClass(Task);
+
+// Add pre-update middleware
+TaskSchema.pre('findOneAndUpdate', function () {
+  const update = this.getUpdate() as any;
+  if (update.status === 'completed') {
+    update.completed = true;
+    update.completedAt = new Date();
+    this.set(update);
+  } else if (update.status && update.status !== 'completed') {
+    // If changing from completed to another status
+    update.completed = false;
+    update.completedAt = null;
+    this.set(update);
+  }
+});

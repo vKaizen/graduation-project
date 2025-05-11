@@ -16,6 +16,8 @@ import { PreferencesModule } from './preferences/preferences.module';
 import { InvitesModule } from './invites/invites.module';
 import { WebsocketsModule } from './websockets/websockets.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { GoalsModule } from './goals/goals.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 
 @Module({
   imports: [
@@ -34,6 +36,8 @@ import { NotificationsModule } from './notifications/notifications.module';
     InvitesModule,
     WebsocketsModule,
     NotificationsModule,
+    GoalsModule,
+    AnalyticsModule,
   ],
   controllers: [AppController],
   providers: [],
