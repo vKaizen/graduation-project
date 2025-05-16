@@ -10,8 +10,26 @@ export class GoalsService {
   constructor(@InjectModel(Goal.name) private goalModel: Model<GoalDocument>) {}
 
   async create(createGoalDto: CreateGoalDto): Promise<GoalDocument> {
+    console.log('Creating goal with data:', createGoalDto);
+    console.log('Is private:', createGoalDto.isPrivate);
+    console.log('Members:', createGoalDto.members);
+
+    // Ensure members array always includes the owner
+    if (!createGoalDto.members) {
+      createGoalDto.members = [createGoalDto.ownerId];
+    } else if (!createGoalDto.members.includes(createGoalDto.ownerId)) {
+      createGoalDto.members.push(createGoalDto.ownerId);
+    }
+
+    console.log('Final members list:', createGoalDto.members);
+
     const newGoal = new this.goalModel(createGoalDto);
-    return newGoal.save();
+    console.log('New goal model before save:', newGoal);
+
+    const savedGoal = await newGoal.save();
+    console.log('Saved goal:', savedGoal);
+
+    return savedGoal;
   }
 
   // Add a type cast helper method
@@ -29,28 +47,70 @@ export class GoalsService {
     status?: string[];
     timeframe?: string;
     timeframeYear?: number;
+    isPrivate?: boolean;
+    userId?: string;
   }): Promise<GoalDocument[]> {
     let query = this.goalModel.find();
 
     // Apply filters if provided
     if (filters) {
-      if (filters.ownerId) {
-        query = query.where('ownerId').equals(filters.ownerId);
-      }
+      // Special handling for private goals with user ID
+      if (filters.isPrivate === true && filters.userId) {
+        console.log(
+          `Finding private goals for user ${filters.userId} in workspace ${filters.workspaceId}`,
+        );
 
-      if (filters.workspaceId) {
-        query = query.where('workspaceId').equals(filters.workspaceId);
-      }
+        // Find goals where either:
+        // 1. User is the owner, OR
+        // 2. User is in the members array
+        query = query.where({
+          $and: [
+            { isPrivate: true },
+            { workspaceId: filters.workspaceId },
+            {
+              $or: [
+                { ownerId: filters.userId },
+                { members: { $in: [filters.userId] } },
+              ],
+            },
+          ],
+        });
 
-      if (filters.status && filters.status.length > 0) {
-        query = query.where('status').in(filters.status);
-      }
+        // Add debug log to show the MongoDB query
+        console.log('MongoDB query:', JSON.stringify(query.getFilter()));
+      } else if (filters.isPrivate === false && filters.workspaceId) {
+        // For public goals, just filter by workspace
+        console.log(
+          `Finding public goals for workspace ${filters.workspaceId}`,
+        );
+        query = query.where({
+          isPrivate: false,
+          workspaceId: filters.workspaceId,
+        });
+      } else {
+        // Standard filtering
+        if (filters.ownerId) {
+          query = query.where('ownerId').equals(filters.ownerId);
+        }
 
-      if (filters.timeframe) {
-        query = query.where('timeframe').equals(filters.timeframe);
+        if (filters.workspaceId) {
+          query = query.where('workspaceId').equals(filters.workspaceId);
+        }
 
-        if (filters.timeframeYear) {
-          query = query.where('timeframeYear').equals(filters.timeframeYear);
+        if (filters.status && filters.status.length > 0) {
+          query = query.where('status').in(filters.status);
+        }
+
+        if (filters.timeframe) {
+          query = query.where('timeframe').equals(filters.timeframe);
+
+          if (filters.timeframeYear) {
+            query = query.where('timeframeYear').equals(filters.timeframeYear);
+          }
+        }
+
+        if (filters.isPrivate !== undefined) {
+          query = query.where('isPrivate').equals(filters.isPrivate);
         }
       }
     }
@@ -69,6 +129,22 @@ export class GoalsService {
       })
       .lean()
       .then((goals) => {
+        console.log(`Found ${goals.length} goals matching the query`);
+        if (goals.length > 0) {
+          console.log('First goal:', JSON.stringify(goals[0]));
+          // Check if any goals have members
+          const goalsWithMembers = goals.filter(
+            (goal) => goal.members && goal.members.length > 0,
+          );
+          console.log(`Goals with members: ${goalsWithMembers.length}`);
+          if (goalsWithMembers.length > 0) {
+            console.log(
+              'First goal with members:',
+              JSON.stringify(goalsWithMembers[0]),
+            );
+          }
+        }
+
         return this.mapGoalDocuments(
           goals.map((goal) => {
             // Create aliases for frontend compatibility
@@ -167,6 +243,7 @@ export class GoalsService {
 
   async getHierarchy(options?: {
     workspaceId?: string;
+    isPrivate?: boolean;
   }): Promise<GoalDocument[]> {
     try {
       console.log('Fetching goal hierarchy with options:', options);
@@ -190,6 +267,12 @@ export class GoalsService {
         query = query.where('workspaceId').equals(options.workspaceId);
       }
 
+      // Filter by isPrivate if specified
+      if (options?.isPrivate !== undefined) {
+        console.log('Filtering by isPrivate:', options.isPrivate);
+        query = query.where('isPrivate').equals(options.isPrivate);
+      }
+
       const rootGoals = await query.lean().exec();
       console.log(`Found ${rootGoals?.length || 0} root goals`);
 
@@ -211,7 +294,7 @@ export class GoalsService {
 
       // Recursively fetch all children for each root goal
       for (const rootGoal of rootGoals) {
-        await this.loadChildren(rootGoal);
+        await this.loadChildren(rootGoal, options);
       }
 
       return this.mapGoalDocuments(rootGoals);
@@ -222,9 +305,15 @@ export class GoalsService {
   }
 
   // Helper function to recursively load children goals
-  private async loadChildren(goal: any): Promise<void> {
+  private async loadChildren(
+    goal: any,
+    options?: {
+      workspaceId?: string;
+      isPrivate?: boolean;
+    },
+  ): Promise<void> {
     try {
-      const children = await this.goalModel
+      let query = this.goalModel
         .find({ parentGoalId: goal._id })
         .populate({
           path: 'ownerId',
@@ -235,9 +324,14 @@ export class GoalsService {
           path: 'workspaceId',
           model: 'Workspace',
           options: { strictPopulate: false },
-        })
-        .lean()
-        .exec();
+        });
+
+      // Filter children by isPrivate if specified
+      if (options?.isPrivate !== undefined) {
+        query = query.where('isPrivate').equals(options.isPrivate);
+      }
+
+      const children = await query.lean().exec();
 
       // Create aliases for frontend compatibility on children
       children.forEach((child) => {
@@ -254,12 +348,11 @@ export class GoalsService {
 
       // Recursively load children for each child
       for (const child of children) {
-        await this.loadChildren(child);
+        await this.loadChildren(child, options);
       }
     } catch (error) {
-      console.error(`Error loading children for goal ${goal._id}:`, error);
-      // Don't throw error, just set empty children to avoid breaking the hierarchy
-      goal.children = [];
+      console.error('Error loading children:', error);
+      throw error;
     }
   }
 

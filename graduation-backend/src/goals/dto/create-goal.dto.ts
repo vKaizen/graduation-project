@@ -68,4 +68,8 @@ export class CreateGoalDto {
   @IsUUID()
   @IsOptional()
   workspaceId?: string;
+
+  @IsArray()
+  @IsOptional()
+  members?: string[];
 }

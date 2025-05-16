@@ -34,6 +34,7 @@ export interface GoalDocument extends Document {
   projects: string[];
   workspaceId: string;
   workspace: any;
+  members: string[];
   children?: GoalDocument[];
 }
 
@@ -89,6 +90,9 @@ export class Goal {
 
   @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'Workspace' })
   workspaceId: string;
+
+  @Prop({ type: [{ type: MongooseSchema.Types.ObjectId, ref: 'User' }] })
+  members: string[];
 
   // Virtual property for workspace
   workspace: any;

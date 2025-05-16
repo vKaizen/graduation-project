@@ -1,3 +1,4 @@
+/* eslint-disable prettier/prettier */
 import {
   Controller,
   Get,
@@ -33,7 +34,25 @@ export class GoalsController {
     @Query('status') status?: string,
     @Query('timeframe') timeframe?: string,
     @Query('timeframeYear') timeframeYear?: string,
+    @Query('isPrivate') isPrivate?: string,
+    @Request() req?: any,
   ) {
+    console.log('GET /goals with filters:', {
+      ownerId,
+      workspaceId,
+      status,
+      timeframe,
+      timeframeYear,
+      isPrivate,
+    });
+    console.log(
+      'Authentication info:',
+      req?.user ? 'Authenticated' : 'Not authenticated',
+    );
+    if (req?.user) {
+      console.log('Authenticated user ID:', req.user.userId);
+    }
+
     const filters: any = {};
 
     if (ownerId) filters.ownerId = ownerId;
@@ -41,16 +60,35 @@ export class GoalsController {
     if (status) filters.status = status.split(',');
     if (timeframe) filters.timeframe = timeframe;
     if (timeframeYear) filters.timeframeYear = parseInt(timeframeYear, 10);
+    if (isPrivate !== undefined) {
+      // Convert string 'true'/'false' to boolean
+      filters.isPrivate = isPrivate === 'true';
+      console.log('isPrivate filter set to:', filters.isPrivate);
 
+      // If fetching private goals, include the current user ID
+      // This is used to find goals where the user is either the owner or a member
+      if (filters.isPrivate === true && req?.user?.userId) {
+        filters.userId = req.user.userId;
+        console.log('Adding userId filter for private goals:', filters.userId);
+      } else if (filters.isPrivate === true) {
+        console.log(
+          'WARNING: Fetching private goals but no user ID available in request!',
+        );
+      }
+    }
+
+    console.log('Final filters for goals query:', filters);
     return this.goalsService.findAll(filters);
   }
 
   @Get('hierarchy')
   async getHierarchy(
     @Query('workspaceId') workspaceId?: string,
+    @Query('isPrivate') isPrivate?: string,
     @Request() req?: any,
   ): Promise<Goal[]> {
     console.log('GET /goals/hierarchy with workspaceId:', workspaceId);
+    console.log('GET /goals/hierarchy with isPrivate:', isPrivate);
 
     // Log authentication info
     console.log(
@@ -62,8 +100,15 @@ export class GoalsController {
     }
 
     try {
+      // Convert string 'true'/'false' to boolean if provided
+      let isPrivateBoolean: boolean | undefined = undefined;
+      if (isPrivate !== undefined) {
+        isPrivateBoolean = isPrivate === 'true';
+      }
+
       const hierarchy = await this.goalsService.getHierarchy({
         workspaceId,
+        isPrivate: isPrivateBoolean,
       });
 
       console.log(

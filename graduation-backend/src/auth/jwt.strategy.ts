@@ -29,10 +29,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   async validate(payload: any) {
     try {
       this.logger.debug(`Validating JWT payload: ${JSON.stringify(payload)}`);
+      console.log('JWT Strategy - Validating token payload:', payload);
 
       // Ensure we have a valid user ID
       if (!payload || !payload.sub) {
         this.logger.error('JWT payload missing user ID (sub)');
+        console.error('JWT Strategy - Missing user ID (sub) in payload');
         throw new UnauthorizedException('Invalid token payload');
       }
 
@@ -42,13 +44,17 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         : [payload.roles].filter(Boolean);
 
       this.logger.debug(`JWT validated for user: ${payload.sub}`);
+      console.log('JWT Strategy - Validated user ID:', payload.sub);
 
-      return {
+      const user = {
         userId: payload.sub,
         username: payload.username,
         roles: rolesArray,
         defaultWorkspaceId: payload.defaultWorkspaceId,
       };
+
+      console.log('JWT Strategy - Returning user object:', user);
+      return user;
     } catch (error) {
       this.logger.error(`JWT validation error: ${error.message}`);
       throw new UnauthorizedException('Token validation failed');
