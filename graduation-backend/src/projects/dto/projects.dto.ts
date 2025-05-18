@@ -26,8 +26,8 @@ export class CreateProjectDto {
 
   @IsString()
   @IsOptional()
-  @IsIn(['on-track', 'at-risk', 'off-track'], {
-    message: 'Status must be on-track, at-risk, or off-track',
+  @IsIn(['on-track', 'at-risk', 'off-track', 'completed'], {
+    message: 'Status must be on-track, at-risk, off-track, or completed',
   })
   status?: string;
 
@@ -62,8 +62,8 @@ export class AddMemberDto {
 export class UpdateProjectStatusDto {
   @IsString()
   @IsNotEmpty()
-  @IsIn(['on-track', 'at-risk', 'off-track'], {
-    message: 'Status must be on-track, at-risk, or off-track',
+  @IsIn(['on-track', 'at-risk', 'off-track', 'completed'], {
+    message: 'Status must be on-track, at-risk, off-track, or completed',
   })
   status: string;
 }

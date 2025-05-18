@@ -16,6 +16,7 @@ export type GoalTimeframe =
   | 'H2'
   | 'FY'
   | 'custom';
+export type GoalProgressResource = 'projects' | 'tasks' | 'none';
 
 export interface GoalDocument extends Document {
   title: string;
@@ -36,6 +37,7 @@ export interface GoalDocument extends Document {
   workspace: any;
   members: string[];
   children?: GoalDocument[];
+  progressResource: GoalProgressResource;
 }
 
 @Schema({ timestamps: true, toJSON: { virtuals: true } })
@@ -94,6 +96,13 @@ export class Goal {
   @Prop({ type: [{ type: MongooseSchema.Types.ObjectId, ref: 'User' }] })
   members: string[];
 
+  @Prop({
+    type: String,
+    enum: ['projects', 'tasks', 'none'],
+    default: 'none',
+  })
+  progressResource: GoalProgressResource;
+
   // Virtual property for workspace
   workspace: any;
 
@@ -126,6 +135,12 @@ GoalSchema.virtual('workspace', {
 
 // Add pre-save middleware to calculate progress based on linked tasks or child goals
 GoalSchema.pre('save', async function (next) {
+  // Log members array for debugging
+  console.log('Pre-save middleware for Goal');
+  console.log('Goal ID:', this._id);
+  console.log('Members array:', this.members);
+  console.log('Members array length:', this.members ? this.members.length : 0);
+
   // If this goal has progress manually set, don't auto-calculate
   if (this.isModified('progress')) {
     return next();

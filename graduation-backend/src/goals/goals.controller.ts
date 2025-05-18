@@ -85,10 +85,14 @@ export class GoalsController {
   async getHierarchy(
     @Query('workspaceId') workspaceId?: string,
     @Query('isPrivate') isPrivate?: string,
+    @Query('includeProjects') includeProjects?: string,
+    @Query('includeTasks') includeTasks?: string,
     @Request() req?: any,
   ): Promise<Goal[]> {
     console.log('GET /goals/hierarchy with workspaceId:', workspaceId);
     console.log('GET /goals/hierarchy with isPrivate:', isPrivate);
+    console.log('GET /goals/hierarchy with includeProjects:', includeProjects);
+    console.log('GET /goals/hierarchy with includeTasks:', includeTasks);
 
     // Log authentication info
     console.log(
@@ -106,9 +110,21 @@ export class GoalsController {
         isPrivateBoolean = isPrivate === 'true';
       }
 
+      let includeProjectsBoolean: boolean | undefined = undefined;
+      if (includeProjects !== undefined) {
+        includeProjectsBoolean = includeProjects === 'true';
+      }
+
+      let includeTasksBoolean: boolean | undefined = undefined;
+      if (includeTasks !== undefined) {
+        includeTasksBoolean = includeTasks === 'true';
+      }
+
       const hierarchy = await this.goalsService.getHierarchy({
         workspaceId,
         isPrivate: isPrivateBoolean,
+        includeProjects: includeProjectsBoolean,
+        includeTasks: includeTasksBoolean,
       });
 
       console.log(

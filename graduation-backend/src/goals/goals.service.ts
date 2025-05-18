@@ -12,22 +12,53 @@ export class GoalsService {
   async create(createGoalDto: CreateGoalDto): Promise<GoalDocument> {
     console.log('Creating goal with data:', createGoalDto);
     console.log('Is private:', createGoalDto.isPrivate);
-    console.log('Members:', createGoalDto.members);
+    console.log('Owner ID:', createGoalDto.ownerId);
+    console.log('Initial members array:', createGoalDto.members);
 
-    // Ensure members array always includes the owner
+    // Ensure members array always includes the owner for permission purposes
     if (!createGoalDto.members) {
       createGoalDto.members = [createGoalDto.ownerId];
+      console.log('No members provided, setting owner as the only member');
     } else if (!createGoalDto.members.includes(createGoalDto.ownerId)) {
       createGoalDto.members.push(createGoalDto.ownerId);
+      console.log('Adding owner to members list for permission purposes');
+    } else {
+      console.log('Owner already included in members list');
     }
 
-    console.log('Final members list:', createGoalDto.members);
+    console.log(
+      'Final members list (includes owner for permissions):',
+      createGoalDto.members,
+    );
+
+    // Convert member IDs to proper ObjectIds if they're not already
+    try {
+      const { Types } = require('mongoose');
+
+      if (createGoalDto.members && createGoalDto.members.length > 0) {
+        // Convert string IDs to ObjectId
+        createGoalDto.members = createGoalDto.members.map((id) => {
+          // If it's a string and a valid ObjectId, convert it
+          if (typeof id === 'string' && Types.ObjectId.isValid(id)) {
+            console.log(`Converting member ID ${id} to ObjectId`);
+            return new Types.ObjectId(id);
+          }
+          return id; // Return as is if already ObjectId or not valid
+        });
+
+        console.log('Converted members:', createGoalDto.members);
+      }
+    } catch (error) {
+      console.error('Error converting member IDs to ObjectIds:', error);
+    }
 
     const newGoal = new this.goalModel(createGoalDto);
     console.log('New goal model before save:', newGoal);
+    console.log('Members in new goal model:', newGoal.members);
 
     const savedGoal = await newGoal.save();
     console.log('Saved goal:', savedGoal);
+    console.log('Members in saved goal:', savedGoal.members);
 
     return savedGoal;
   }
@@ -127,6 +158,11 @@ export class GoalsService {
         model: 'Workspace',
         options: { strictPopulate: false },
       })
+      .populate({
+        path: 'members',
+        model: 'User',
+        options: { strictPopulate: false },
+      })
       .lean()
       .then((goals) => {
         console.log(`Found ${goals.length} goals matching the query`);
@@ -161,11 +197,14 @@ export class GoalsService {
   }
 
   async findOne(id: string): Promise<GoalDocument> {
+    console.log(`Finding goal with ID: ${id}`);
+
     const goal = await this.goalModel
       .findById(id)
       .populate({
         path: 'ownerId',
         model: 'User',
+        select: '_id fullName email',
         options: { strictPopulate: false },
       })
       .populate({
@@ -183,6 +222,12 @@ export class GoalsService {
         model: 'Project',
         options: { strictPopulate: false },
       })
+      .populate({
+        path: 'members',
+        model: 'User',
+        select: '_id fullName email',
+        options: { strictPopulate: false },
+      })
       .lean()
       .exec();
 
@@ -193,9 +238,16 @@ export class GoalsService {
     // Create aliases for frontend compatibility
     if (goal.ownerId) {
       goal.owner = goal.ownerId;
+      console.log('Owner populated:', goal.owner);
     }
     if (goal.workspaceId) {
       goal.workspace = goal.workspaceId;
+    }
+
+    // Log members for debugging
+    console.log(`Goal ${id} has ${goal.members?.length || 0} members`);
+    if (goal.members && goal.members.length > 0) {
+      console.log('Members populated:', goal.members);
     }
 
     return this.mapGoalDocument(goal);
@@ -207,6 +259,30 @@ export class GoalsService {
   ): Promise<GoalDocument> {
     const existingGoal = await this.findOne(id);
 
+    // Convert member IDs to proper ObjectIds if they're being updated
+    try {
+      const { Types } = require('mongoose');
+
+      if (updateGoalDto.members && updateGoalDto.members.length > 0) {
+        // Convert string IDs to ObjectId
+        updateGoalDto.members = updateGoalDto.members.map((id) => {
+          // If it's a string and a valid ObjectId, convert it
+          if (typeof id === 'string' && Types.ObjectId.isValid(id)) {
+            console.log(`Converting member ID ${id} to ObjectId in update`);
+            return new Types.ObjectId(id);
+          }
+          return id; // Return as is if already ObjectId or not valid
+        });
+
+        console.log('Converted members for update:', updateGoalDto.members);
+      }
+    } catch (error) {
+      console.error(
+        'Error converting member IDs to ObjectIds in update:',
+        error,
+      );
+    }
+
     const updatedGoal = await this.goalModel
       .findByIdAndUpdate(id, updateGoalDto, { new: true })
       .populate({
@@ -217,6 +293,11 @@ export class GoalsService {
       .populate({
         path: 'workspaceId',
         model: 'Workspace',
+        options: { strictPopulate: false },
+      })
+      .populate({
+        path: 'members',
+        model: 'User',
         options: { strictPopulate: false },
       })
       .lean()
@@ -244,13 +325,16 @@ export class GoalsService {
   async getHierarchy(options?: {
     workspaceId?: string;
     isPrivate?: boolean;
+    includeProjects?: boolean;
+    includeTasks?: boolean;
   }): Promise<GoalDocument[]> {
     try {
       console.log('Fetching goal hierarchy with options:', options);
 
-      // Get all root goals (goals without parent)
+      // Simplified approach: Just get all goals for the workspace
+      // This removes the goal hierarchy concept and treats all goals as top-level
       let query = this.goalModel
-        .find({ parentGoalId: { $exists: false } })
+        .find({}) // Start with an empty filter
         .populate({
           path: 'ownerId',
           model: 'User',
@@ -260,8 +344,36 @@ export class GoalsService {
           path: 'workspaceId',
           model: 'Workspace',
           options: { strictPopulate: false },
+        })
+        .populate({
+          path: 'members',
+          model: 'User',
+          options: { strictPopulate: false },
         });
 
+      // Conditionally populate projects and tasks if requested
+      if (options?.includeProjects) {
+        query = query.populate({
+          path: 'projects',
+          model: 'Project',
+          select: '_id name description color progress completed status',
+          options: { strictPopulate: false },
+        });
+      }
+
+      if (options?.includeTasks) {
+        query = query.populate({
+          path: 'linkedTasks',
+          model: 'Task',
+          select: '_id title description completed status',
+          options: { strictPopulate: false },
+        });
+      }
+
+      // Log the initial query
+      console.log('Initial MongoDB query:', JSON.stringify(query.getFilter()));
+
+      // Apply workspace filter if provided (this is now the main filter)
       if (options?.workspaceId) {
         console.log('Filtering by workspaceId:', options.workspaceId);
         query = query.where('workspaceId').equals(options.workspaceId);
@@ -273,17 +385,20 @@ export class GoalsService {
         query = query.where('isPrivate').equals(options.isPrivate);
       }
 
-      const rootGoals = await query.lean().exec();
-      console.log(`Found ${rootGoals?.length || 0} root goals`);
+      // Log the final query
+      console.log('Final MongoDB query:', JSON.stringify(query.getFilter()));
 
-      // Return empty array if no root goals
-      if (!rootGoals || rootGoals.length === 0) {
-        console.log('No root goals found, returning empty array');
+      const goals = await query.lean().exec();
+      console.log(`Found ${goals?.length || 0} goals`);
+
+      // Return empty array if no goals
+      if (!goals || goals.length === 0) {
+        console.log('No goals found, returning empty array');
         return [];
       }
 
       // Create aliases for frontend compatibility
-      rootGoals.forEach((goal) => {
+      goals.forEach((goal) => {
         if (goal.ownerId) {
           goal.owner = goal.ownerId;
         }
@@ -292,66 +407,12 @@ export class GoalsService {
         }
       });
 
-      // Recursively fetch all children for each root goal
-      for (const rootGoal of rootGoals) {
-        await this.loadChildren(rootGoal, options);
-      }
+      // No need to recursively load children, we've decided to use a flat structure
+      // Each goal will be displayed at the same level in the strategy map
 
-      return this.mapGoalDocuments(rootGoals);
+      return this.mapGoalDocuments(goals);
     } catch (error) {
       console.error('Error in getHierarchy:', error);
-      throw error;
-    }
-  }
-
-  // Helper function to recursively load children goals
-  private async loadChildren(
-    goal: any,
-    options?: {
-      workspaceId?: string;
-      isPrivate?: boolean;
-    },
-  ): Promise<void> {
-    try {
-      let query = this.goalModel
-        .find({ parentGoalId: goal._id })
-        .populate({
-          path: 'ownerId',
-          model: 'User',
-          options: { strictPopulate: false },
-        })
-        .populate({
-          path: 'workspaceId',
-          model: 'Workspace',
-          options: { strictPopulate: false },
-        });
-
-      // Filter children by isPrivate if specified
-      if (options?.isPrivate !== undefined) {
-        query = query.where('isPrivate').equals(options.isPrivate);
-      }
-
-      const children = await query.lean().exec();
-
-      // Create aliases for frontend compatibility on children
-      children.forEach((child) => {
-        if (child.ownerId) {
-          child.owner = child.ownerId;
-        }
-        if (child.workspaceId) {
-          child.workspace = child.workspaceId;
-        }
-      });
-
-      // Assign the found children to the goal
-      goal.children = children;
-
-      // Recursively load children for each child
-      for (const child of children) {
-        await this.loadChildren(child, options);
-      }
-    } catch (error) {
-      console.error('Error loading children:', error);
       throw error;
     }
   }
@@ -374,6 +435,11 @@ export class GoalsService {
         .populate({
           path: 'workspaceId',
           model: 'Workspace',
+          options: { strictPopulate: false },
+        })
+        .populate({
+          path: 'members',
+          model: 'User',
           options: { strictPopulate: false },
         })
         .lean();
@@ -412,6 +478,11 @@ export class GoalsService {
         model: 'Workspace',
         options: { strictPopulate: false },
       })
+      .populate({
+        path: 'members',
+        model: 'User',
+        options: { strictPopulate: false },
+      })
       .lean();
 
     // Create aliases for frontend compatibility
@@ -426,50 +497,200 @@ export class GoalsService {
   }
 
   async calculateGoalProgress(goalId: string): Promise<number> {
-    const goal = await this.findOne(goalId);
+    console.log(`Calculating progress for goal: ${goalId}`);
 
-    // If no linked tasks and no children, keep current progress
-    if (
-      (!goal.linkedTasks || goal.linkedTasks.length === 0) &&
-      (!goal.children || goal.children.length === 0)
-    ) {
-      return goal.progress;
-    }
+    try {
+      // Fetch a fresh instance of the goal to ensure we have the latest data
+      const goal = await this.goalModel
+        .findById(goalId)
+        .populate({
+          path: 'projects',
+          model: 'Project',
+          select: '_id name status completed',
+          options: { strictPopulate: false },
+        })
+        .populate({
+          path: 'linkedTasks',
+          model: 'Task',
+          select: '_id title status completed',
+          options: { strictPopulate: false },
+        })
+        .lean()
+        .exec();
 
-    // If has linked tasks, calculate based on completed tasks
-    if (goal.linkedTasks && goal.linkedTasks.length > 0) {
-      const completedTasks = goal.linkedTasks.filter((task: any) => {
-        // Check if task is an object with status property
-        if (typeof task === 'object' && task !== null) {
-          return task.status === 'completed';
+      if (!goal) {
+        console.log(
+          `Goal with ID ${goalId} not found for progress calculation`,
+        );
+        return 0;
+      }
+
+      console.log(`Fetched fresh goal data for progress calculation`);
+
+      // If goal doesn't have a progressResource or it's set to 'none', keep current progress
+      if (!goal.progressResource || goal.progressResource === 'none') {
+        console.log(
+          `Goal has no progress resource, keeping current progress: ${goal.progress}%`,
+        );
+        return goal.progress;
+      }
+
+      // Calculate progress based on linked projects if progressResource is 'projects'
+      if (
+        goal.progressResource === 'projects' &&
+        goal.projects &&
+        goal.projects.length > 0
+      ) {
+        console.log(
+          `Calculating progress based on ${goal.projects.length} projects`,
+        );
+
+        // Since we already populated projects, we can use them directly
+        const projectObjects = goal.projects as any[];
+        if (!projectObjects || projectObjects.length === 0) {
+          console.log(
+            `No project objects found, keeping current progress: ${goal.progress}%`,
+          );
+          return goal.progress;
         }
-        return false;
-      });
-      const progress = Math.round(
-        (completedTasks.length / goal.linkedTasks.length) * 100,
+
+        // Debug each project to verify completion status
+        projectObjects.forEach((project, index) => {
+          console.log(`Project ${index + 1}:`, {
+            id: project._id || 'unknown',
+            name: project.name || 'unnamed',
+            completed: !!project.completed,
+            status: project.status || 'unknown',
+          });
+        });
+
+        // Calculate based on completed projects
+        const completedProjects = projectObjects.filter(
+          (project) =>
+            project.completed === true || project.status === 'completed',
+        );
+
+        console.log(
+          `Found ${completedProjects.length} completed projects out of ${projectObjects.length}`,
+        );
+
+        const progress = Math.round(
+          (completedProjects.length / projectObjects.length) * 100,
+        );
+
+        console.log(`Calculated progress: ${progress}%`);
+
+        // Check if progress has changed
+        if (progress !== goal.progress) {
+          console.log(
+            `Progress changed from ${goal.progress}% to ${progress}%`,
+          );
+          // Update the goal progress
+          await this.update(goalId, { progress });
+        } else {
+          console.log(`Progress unchanged at ${progress}%`);
+        }
+
+        return progress;
+      }
+
+      // Calculate progress based on linked tasks if progressResource is 'tasks'
+      if (
+        goal.progressResource === 'tasks' &&
+        goal.linkedTasks &&
+        goal.linkedTasks.length > 0
+      ) {
+        console.log(
+          `Calculating progress based on ${goal.linkedTasks.length} tasks`,
+        );
+
+        // Since we already populated linkedTasks, we can use them directly
+        const taskObjects = goal.linkedTasks as any[];
+        if (!taskObjects || taskObjects.length === 0) {
+          console.log(
+            `No task objects found, keeping current progress: ${goal.progress}%`,
+          );
+          return goal.progress;
+        }
+
+        // Debug each task to verify completion status
+        taskObjects.forEach((task, index) => {
+          console.log(`Task ${index + 1}:`, {
+            id: task._id || 'unknown',
+            title: task.title || 'unnamed',
+            completed: !!task.completed,
+            status: task.status || 'unknown',
+          });
+        });
+
+        // Calculate based on completed tasks - check both "completed" flag and "status" field
+        const completedTasks = taskObjects.filter(
+          (task) => task.completed === true || task.status === 'completed',
+        );
+
+        console.log(
+          `Found ${completedTasks.length} completed tasks out of ${taskObjects.length}`,
+        );
+
+        const progress = Math.round(
+          (completedTasks.length / taskObjects.length) * 100,
+        );
+
+        console.log(`Calculated progress: ${progress}%`);
+
+        // Check if progress has changed
+        if (progress !== goal.progress) {
+          console.log(
+            `Progress changed from ${goal.progress}% to ${progress}%`,
+          );
+          // Update the goal progress
+          await this.update(goalId, { progress });
+        } else {
+          console.log(`Progress unchanged at ${progress}%`);
+        }
+
+        return progress;
+      }
+
+      // If has children goals but no selected progress resource, calculate based on children's progress
+      if (goal.children && goal.children.length > 0) {
+        console.log(
+          `Calculating progress based on ${goal.children.length} child goals`,
+        );
+
+        const totalChildrenProgress = goal.children.reduce(
+          (sum, child) =>
+            sum + (typeof child.progress === 'number' ? child.progress : 0),
+          0,
+        );
+        const progress = Math.round(
+          totalChildrenProgress / goal.children.length,
+        );
+
+        console.log(`Calculated progress from children: ${progress}%`);
+
+        // Check if progress has changed
+        if (progress !== goal.progress) {
+          console.log(
+            `Progress changed from ${goal.progress}% to ${progress}%`,
+          );
+          // Update the goal progress
+          await this.update(goalId, { progress });
+        } else {
+          console.log(`Progress unchanged at ${progress}%`);
+        }
+
+        return progress;
+      }
+
+      console.log(
+        `No progress calculation method applied, keeping current progress: ${goal.progress}%`,
       );
-
-      // Update the goal progress
-      await this.update(goalId, { progress });
-
-      return progress;
+      return goal.progress;
+    } catch (error) {
+      console.error(`Error calculating goal progress: ${error.message}`);
+      // In case of error, return current progress if available, or 0
+      return 0;
     }
-
-    // If has children but no linked tasks, calculate based on children's progress
-    if (goal.children && goal.children.length > 0) {
-      const totalChildrenProgress = goal.children.reduce(
-        (sum, child) =>
-          sum + (typeof child.progress === 'number' ? child.progress : 0),
-        0,
-      );
-      const progress = Math.round(totalChildrenProgress / goal.children.length);
-
-      // Update the goal progress
-      await this.update(goalId, { progress });
-
-      return progress;
-    }
-
-    return goal.progress;
   }
 }

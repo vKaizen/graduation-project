@@ -526,9 +526,24 @@ export class ProjectsService {
     const oldStatus = project.status || 'No status';
     const newStatus = updateStatusDto.status;
 
+    // Prepare update object
+    const updateObj: any = { status: newStatus };
+
+    // If status is 'completed', set completed flag and timestamp
+    if (newStatus === 'completed') {
+      updateObj.completed = true;
+      updateObj.completedAt = new Date();
+    } else {
+      // If status is changed from completed to something else, reset completed flag
+      if (project.completed) {
+        updateObj.completed = false;
+        updateObj.completedAt = null;
+      }
+    }
+
     // Update project status
     const updatedProject = await this.projectModel
-      .findByIdAndUpdate(projectId, { status: newStatus }, { new: true })
+      .findByIdAndUpdate(projectId, updateObj, { new: true })
       .exec();
 
     // Log project status update

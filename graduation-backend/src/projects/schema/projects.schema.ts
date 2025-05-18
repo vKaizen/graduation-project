@@ -16,9 +16,15 @@ export class Project extends Document {
   @Prop({
     type: String,
     default: 'on-track',
-    enum: ['on-track', 'at-risk', 'off-track'],
+    enum: ['on-track', 'at-risk', 'off-track', 'completed'],
   })
   status: string;
+
+  @Prop({ type: Boolean, default: false })
+  completed: boolean;
+
+  @Prop({ type: Date, default: null })
+  completedAt: Date;
 
   @Prop({
     type: String,

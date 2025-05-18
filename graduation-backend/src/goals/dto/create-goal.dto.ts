@@ -10,7 +10,11 @@ import {
   IsArray,
   IsDateString,
 } from 'class-validator';
-import { GoalStatus, GoalTimeframe } from '../schema/goal.schema';
+import {
+  GoalStatus,
+  GoalTimeframe,
+  GoalProgressResource,
+} from '../schema/goal.schema';
 
 export class CreateGoalDto {
   @IsString()
@@ -72,4 +76,8 @@ export class CreateGoalDto {
   @IsArray()
   @IsOptional()
   members?: string[];
+
+  @IsEnum(['projects', 'tasks', 'none'])
+  @IsOptional()
+  progressResource?: GoalProgressResource = 'none';
 }
