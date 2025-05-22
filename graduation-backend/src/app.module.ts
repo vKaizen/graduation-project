@@ -18,6 +18,7 @@ import { WebsocketsModule } from './websockets/websockets.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { GoalsModule } from './goals/goals.module';
 import { AnalyticsModule } from './analytics/analytics.module';
+import { PortfoliosModule } from './portfolios/portfolios.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { AnalyticsModule } from './analytics/analytics.module';
     NotificationsModule,
     GoalsModule,
     AnalyticsModule,
+    PortfoliosModule,
   ],
   controllers: [AppController],
   providers: [],
