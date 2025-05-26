@@ -169,6 +169,22 @@ export class ProjectsController {
       authUser,
     );
   }
+
+  @Delete(':id')
+  async removeProject(@Param('id') id: string, @Request() req): Promise<void> {
+    try {
+      const userId = req.user.userId;
+      const authUser = {
+        userId: req.user.userId,
+        name: req.user.username || 'Unknown User',
+      };
+
+      return this.projectsService.remove(id, userId, authUser);
+    } catch (error) {
+      console.error(`Error deleting project ${id}:`, error);
+      throw error;
+    }
+  }
 }
 
 @Controller('workspaces/:workspaceId/projects')

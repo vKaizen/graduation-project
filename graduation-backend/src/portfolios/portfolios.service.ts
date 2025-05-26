@@ -252,4 +252,18 @@ export class PortfoliosService {
 
     return { status, progress };
   }
+
+  // Find portfolios that contain a specific project
+  async findPortfoliosByProjectId(projectId: string): Promise<Portfolio[]> {
+    if (!Types.ObjectId.isValid(projectId)) {
+      throw new BadRequestException('Invalid project ID');
+    }
+
+    // Find all portfolios that have this project in their projects array
+    const portfolios = await this.portfolioModel
+      .find({ projects: new Types.ObjectId(projectId) })
+      .exec();
+
+    return portfolios;
+  }
 }

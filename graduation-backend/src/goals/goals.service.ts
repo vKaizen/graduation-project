@@ -353,19 +353,22 @@ export class GoalsService {
 
       // Conditionally populate projects and tasks if requested
       if (options?.includeProjects) {
+        console.log('Including projects with full data in response');
         query = query.populate({
           path: 'projects',
           model: 'Project',
-          select: '_id name description color progress completed status',
+          select:
+            '_id name description color status completed completedAt progress workspaceId',
           options: { strictPopulate: false },
         });
       }
 
       if (options?.includeTasks) {
+        console.log('Including tasks with full data in response');
         query = query.populate({
           path: 'linkedTasks',
           model: 'Task',
-          select: '_id title description completed status',
+          select: '_id title description completed status priority dueDate',
           options: { strictPopulate: false },
         });
       }
@@ -404,6 +407,33 @@ export class GoalsService {
         }
         if (goal.workspaceId) {
           goal.workspace = goal.workspaceId;
+        }
+
+        // Debug projects and tasks population
+        if (options?.includeProjects && goal.projects) {
+          console.log(`Goal ${goal._id} has ${goal.projects.length} projects`);
+          if (goal.projects.length > 0) {
+            const firstProject = goal.projects[0];
+            console.log(
+              `First project data sample:`,
+              typeof firstProject === 'string'
+                ? `String ID: ${firstProject}`
+                : `Object with keys: ${Object.keys(firstProject).join(', ')}`,
+            );
+          }
+        }
+
+        if (options?.includeTasks && goal.linkedTasks) {
+          console.log(`Goal ${goal._id} has ${goal.linkedTasks.length} tasks`);
+          if (goal.linkedTasks.length > 0) {
+            const firstTask = goal.linkedTasks[0];
+            console.log(
+              `First task data sample:`,
+              typeof firstTask === 'string'
+                ? `String ID: ${firstTask}`
+                : `Object with keys: ${Object.keys(firstTask).join(', ')}`,
+            );
+          }
         }
       });
 

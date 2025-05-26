@@ -25,14 +25,14 @@ export interface GoalDocument extends Document {
   parentGoalId: string;
   ownerId: string;
   owner: any;
-  linkedTasks: string[];
+  linkedTasks: string[] | any[];
   status: GoalStatus;
   isPrivate: boolean;
   timeframe: GoalTimeframe;
   timeframeYear: number;
   startDate: Date;
   dueDate: Date;
-  projects: string[];
+  projects: string[] | any[];
   workspaceId: string;
   workspace: any;
   members: string[];
@@ -61,7 +61,7 @@ export class Goal {
   owner: any;
 
   @Prop({ type: [{ type: MongooseSchema.Types.ObjectId, ref: 'Task' }] })
-  linkedTasks: string[];
+  linkedTasks: MongooseSchema.Types.ObjectId[] | string[];
 
   @Prop({
     default: 'no-status',
@@ -88,7 +88,7 @@ export class Goal {
   dueDate: Date;
 
   @Prop({ type: [{ type: MongooseSchema.Types.ObjectId, ref: 'Project' }] })
-  projects: string[];
+  projects: MongooseSchema.Types.ObjectId[] | string[];
 
   @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'Workspace' })
   workspaceId: string;

@@ -16,6 +16,8 @@ import {
 import { ActivityLogsService } from '../activity-logs/activity-logs.service';
 import { WorkspacesService } from '../workspaces/workspaces.service';
 import { NotificationEventsService } from '../notifications/notification-events.service';
+import { Task } from '../tasks/schema/tasks.schema';
+import { PortfoliosService } from '../portfolios/portfolios.service';
 
 // Interface for authenticated user
 interface AuthUser {
@@ -27,9 +29,11 @@ interface AuthUser {
 export class ProjectsService {
   constructor(
     @InjectModel(Project.name) private projectModel: Model<Project>,
+    @InjectModel(Task.name) private taskModel: Model<Task>,
     private readonly activityLogsService: ActivityLogsService,
     private readonly workspacesService: WorkspacesService,
     private readonly notificationEventsService: NotificationEventsService,
+    private readonly portfoliosService: PortfoliosService,
   ) {}
 
   async createProject(
@@ -805,5 +809,133 @@ export class ProjectsService {
     }
 
     return updatedProject;
+  }
+
+  async remove(id: string, userId: string, authUser?: AuthUser): Promise<void> {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new BadRequestException('Invalid project ID');
+    }
+
+    // Get the project to check permissions
+    const project = await this.projectModel.findById(id);
+
+    if (!project) {
+      throw new NotFoundException(`Project with ID ${id} not found`);
+    }
+
+    // Check if user has permission to delete this project
+    // Only project creator, project admin/owner, or workspace admin/owner can delete
+    const hasPermission = await this.checkProjectPermission(project, userId, [
+      'admin',
+      'owner',
+    ]);
+
+    if (!hasPermission) {
+      throw new ForbiddenException(
+        'You do not have permission to delete this project',
+      );
+    }
+
+    try {
+      // Find portfolios that contain this project and remove it from them
+      const portfolios =
+        await this.portfoliosService.findPortfoliosByProjectId(id);
+
+      // Remove the project from each portfolio
+      for (const portfolio of portfolios) {
+        await this.portfoliosService.removeProject(
+          portfolio._id.toString(),
+          id,
+        );
+
+        // Log activity about removing project from portfolio
+        await this.activityLogsService.createLog({
+          projectId: id,
+          type: 'updated',
+          content: `Removed project from portfolio: ${portfolio.name}`,
+          user: authUser,
+        });
+      }
+    } catch (error) {
+      console.error(
+        `Error cleaning up portfolio references for project ${id}:`,
+        error,
+      );
+      // Continue with deletion even if portfolio cleanup fails
+    }
+
+    // Delete all tasks associated with this project
+    await this.taskModel.deleteMany({ project: id });
+
+    // Create activity log for deleting tasks
+    await this.activityLogsService.createLog({
+      projectId: id,
+      type: 'updated',
+      content: `Deleted all tasks in project`,
+      user: authUser,
+    });
+
+    // Delete the project
+    await this.projectModel.findByIdAndDelete(id);
+
+    // Create activity log for project deletion
+    await this.activityLogsService.createLog({
+      projectId: id,
+      type: 'updated',
+      content: `Deleted project ${project.name}`,
+      user: authUser,
+    });
+  }
+
+  // Helper method to check if a user has permission for a project
+  private async checkProjectPermission(
+    project: Project,
+    userId: string,
+    allowedRoles: string[] = ['admin', 'owner'],
+  ): Promise<boolean> {
+    // If user is the creator, they always have permission
+    if (project.createdBy?.toString() === userId) {
+      return true;
+    }
+
+    // Check project roles
+    if (Array.isArray(project.roles)) {
+      const userRole = project.roles.find((role) => {
+        const roleUserId =
+          typeof role.userId === 'object'
+            ? role.userId.toString()
+            : role.userId;
+
+        return roleUserId === userId;
+      });
+
+      if (userRole && allowedRoles.includes(userRole.role.toLowerCase())) {
+        return true;
+      }
+    }
+
+    // Check if user is workspace admin or owner
+    try {
+      const workspaceId = project.workspaceId?.toString();
+      if (workspaceId) {
+        const workspace = await this.workspacesService.findById(
+          workspaceId,
+          userId,
+        );
+        if (workspace) {
+          // If we can access the workspace details as this user,
+          // check if user is workspace owner
+          if (workspace.owner?.toString() === userId) {
+            return true;
+          }
+
+          // Remove workspace roles check since it's not in the Workspace type
+        }
+      }
+    } catch (error) {
+      console.error('Error checking workspace permissions:', error);
+    }
+
+    return false;
   }
 }

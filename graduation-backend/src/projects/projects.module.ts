@@ -12,15 +12,21 @@ import { AuthModule } from 'src/auth/auth.module';
 import { ActivityLogsModule } from '../activity-logs/activity-logs.module';
 import { WorkspacesModule } from '../workspaces/workspaces.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { Task, TaskSchema } from '../tasks/schema/tasks.schema';
+import { PortfoliosModule } from '../portfolios/portfolios.module';
 
 @Module({
   imports: [
-    MongooseModule.forFeature([{ name: Project.name, schema: ProjectSchema }]),
+    MongooseModule.forFeature([
+      { name: Project.name, schema: ProjectSchema },
+      { name: Task.name, schema: TaskSchema },
+    ]),
     SectionsModule, // Import the Sections module
     AuthModule,
     ActivityLogsModule, // Import the ActivityLogs module
     WorkspacesModule, // Import the Workspaces module
     NotificationsModule, // Import the Notifications module
+    PortfoliosModule, // Import the Portfolios module to clean up references when deleting projects
   ],
   controllers: [ProjectsController, WorkspaceProjectsController],
   providers: [ProjectsService],
