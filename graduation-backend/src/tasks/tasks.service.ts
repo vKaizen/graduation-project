@@ -1,5 +1,10 @@
 /* eslint-disable prettier/prettier */
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  forwardRef,
+  Inject,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Task } from './schema/tasks.schema';
@@ -8,13 +13,18 @@ import { UpdateTaskDto } from './dto/updateTask.dto';
 import { Section } from '../sections/schema/sections.schema';
 import { CreatePersonalTaskDto } from './dto/create-personal-task.dto';
 import { NotificationEventsService } from '../notifications/notification-events.service';
+import { Goal } from '../goals/schema/goal.schema';
+import { GoalsService } from '../goals/goals.service';
 
 @Injectable()
 export class TasksService {
   constructor(
     @InjectModel(Task.name) private taskModel: Model<Task>,
     @InjectModel(Section.name) private sectionModel: Model<Section>,
+    @InjectModel(Goal.name) private goalModel: Model<Goal>,
     private notificationEventsService: NotificationEventsService,
+    @Inject(forwardRef(() => GoalsService))
+    private goalsService: GoalsService,
   ) {}
 
   async createTask(createTaskDto: CreateTaskDto): Promise<Task> {
@@ -271,6 +281,26 @@ export class TasksService {
             (t) => t.toString() !== id.toString(),
           );
           await oldSection.save({ session });
+        }
+      }
+
+      // Find all goals that have this task linked
+      const goals = await this.goalModel
+        .find({ linkedTasks: id })
+        .session(session);
+
+      // Remove task from each goal
+      for (const goal of goals) {
+        // Convert to string before filtering to ensure proper comparison
+        goal.linkedTasks = goal.linkedTasks.filter(
+          (taskId) => taskId.toString() !== id.toString(),
+        ) as any; // Cast as any to avoid TypeScript errors with mixed types
+
+        await goal.save({ session });
+
+        // Recalculate goal progress if this goal uses tasks for progress
+        if (goal.progressResource === 'tasks') {
+          await this.goalsService.calculateGoalProgress(goal._id.toString());
         }
       }
 

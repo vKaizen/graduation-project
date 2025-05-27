@@ -18,6 +18,7 @@ import { WorkspacesService } from '../workspaces/workspaces.service';
 import { NotificationEventsService } from '../notifications/notification-events.service';
 import { Task } from '../tasks/schema/tasks.schema';
 import { PortfoliosService } from '../portfolios/portfolios.service';
+import { GoalsService } from '../goals/goals.service';
 
 // Interface for authenticated user
 interface AuthUser {
@@ -34,6 +35,7 @@ export class ProjectsService {
     private readonly workspacesService: WorkspacesService,
     private readonly notificationEventsService: NotificationEventsService,
     private readonly portfoliosService: PortfoliosService,
+    private readonly goalsService: GoalsService,
   ) {}
 
   async createProject(
@@ -862,6 +864,36 @@ export class ProjectsService {
         error,
       );
       // Continue with deletion even if portfolio cleanup fails
+    }
+
+    try {
+      // Find goals that have this project linked and remove the project reference
+      const goals = await this.goalsService.findGoalsByProjectId(id);
+
+      // Remove project from each goal
+      for (const goal of goals) {
+        // Remove project ID from projects array
+        await this.goalsService.removeProjectFromGoal(goal._id.toString(), id);
+
+        // Log activity about removing project from goal
+        await this.activityLogsService.createLog({
+          projectId: id,
+          type: 'updated',
+          content: `Removed project from goal: ${goal.title}`,
+          user: authUser,
+        });
+
+        // Recalculate goal progress if this goal uses projects for progress
+        if (goal.progressResource === 'projects') {
+          await this.goalsService.calculateGoalProgress(goal._id.toString());
+        }
+      }
+    } catch (error) {
+      console.error(
+        `Error cleaning up goal references for project ${id}:`,
+        error,
+      );
+      // Continue with deletion even if goal cleanup fails
     }
 
     // Delete all tasks associated with this project

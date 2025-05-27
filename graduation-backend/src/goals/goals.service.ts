@@ -723,4 +723,46 @@ export class GoalsService {
       return 0;
     }
   }
+
+  async findGoalsByProjectId(projectId: string): Promise<GoalDocument[]> {
+    return this.goalModel.find({ projects: projectId }).exec();
+  }
+
+  async removeProjectFromGoal(
+    goalId: string,
+    projectId: string,
+  ): Promise<GoalDocument> {
+    const updatedGoal = await this.goalModel
+      .findByIdAndUpdate(
+        goalId,
+        { $pull: { projects: projectId } },
+        { new: true },
+      )
+      .populate({
+        path: 'ownerId',
+        model: 'User',
+        options: { strictPopulate: false },
+      })
+      .populate({
+        path: 'workspaceId',
+        model: 'Workspace',
+        options: { strictPopulate: false },
+      })
+      .populate({
+        path: 'members',
+        model: 'User',
+        options: { strictPopulate: false },
+      })
+      .lean();
+
+    // Create aliases for frontend compatibility
+    if (updatedGoal.ownerId) {
+      updatedGoal.owner = updatedGoal.ownerId;
+    }
+    if (updatedGoal.workspaceId) {
+      updatedGoal.workspace = updatedGoal.workspaceId;
+    }
+
+    return this.mapGoalDocument(updatedGoal);
+  }
 }
