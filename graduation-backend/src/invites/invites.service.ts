@@ -20,6 +20,7 @@ import { UsersService } from '../users/users.service';
 import { NotificationsGateway } from '../websockets/notifications.gateway';
 import { NotificationEventsService } from '../notifications/notification-events.service';
 import { ProjectsService } from '../projects/projects.service';
+import { WorkspaceRole } from '../workspaces/schema/workspaces.schema';
 import * as crypto from 'crypto';
 
 @Injectable()
@@ -119,6 +120,7 @@ export class InvitesService {
       inviteeId: new Types.ObjectId(createInviteDto.inviteeId),
       workspaceId: new Types.ObjectId(createInviteDto.workspaceId),
       selectedProjects,
+      role: createInviteDto.role || 'member',
       inviteToken,
       expirationTime,
     });
@@ -206,7 +208,10 @@ export class InvitesService {
     // Add the user to the workspace
     const workspace = await this.workspacesService.addMember(
       invite.workspaceId.toString(),
-      { userId, role: 'member' },
+      {
+        userId,
+        role: (invite.role as WorkspaceRole) || 'member',
+      },
       invite.inviterId.toString(),
     );
 

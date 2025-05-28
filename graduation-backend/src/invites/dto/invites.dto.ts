@@ -21,6 +21,10 @@ export class CreateInviteDto {
   @IsOptional()
   @IsArray()
   readonly selectedProjects?: string[];
+
+  @IsOptional()
+  @IsString()
+  readonly role?: string;
 }
 
 export class AcceptInviteDto {

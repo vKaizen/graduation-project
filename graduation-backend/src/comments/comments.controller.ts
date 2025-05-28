@@ -1,6 +1,5 @@
 /* eslint-disable prettier/prettier */
 
-
 import { Controller, Post, Get, Body, Param } from '@nestjs/common';
 import { CommentsService } from './comments.service';
 import { CreateCommentDto } from './dto/comments.dto';
@@ -11,12 +10,16 @@ export class CommentsController {
   constructor(private readonly commentsService: CommentsService) {}
 
   @Post()
-  async createComment(@Body() createCommentDto: CreateCommentDto): Promise<Comment> {
+  async createComment(
+    @Body() createCommentDto: CreateCommentDto,
+  ): Promise<Comment> {
     return this.commentsService.createComment(createCommentDto);
   }
 
   @Get('task/:taskId')
-  async getCommentsByTaskId(@Param('taskId') taskId: string): Promise<Comment[]> {
+  async getCommentsByTaskId(
+    @Param('taskId') taskId: string,
+  ): Promise<Comment[]> {
     return this.commentsService.getCommentsByTaskId(taskId);
   }
 }

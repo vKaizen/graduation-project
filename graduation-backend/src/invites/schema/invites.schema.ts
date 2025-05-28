@@ -18,6 +18,9 @@ export class Invite extends Document {
   @Prop({ type: [Types.ObjectId], ref: 'Project', default: [] })
   selectedProjects: Types.ObjectId[];
 
+  @Prop({ type: String, default: 'member' })
+  role: string;
+
   @Prop({
     type: String,
     enum: ['pending', 'accepted', 'expired', 'revoked'],
