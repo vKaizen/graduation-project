@@ -32,6 +32,17 @@ export class TasksService {
     session.startTransaction();
 
     try {
+      // Set a proper order value if not provided
+      if (createTaskDto.order === undefined) {
+        // Find the highest order in the section and add 1
+        const maxOrderTask = await this.taskModel
+          .findOne({ section: createTaskDto.section })
+          .sort({ order: -1 })
+          .session(session);
+
+        createTaskDto.order = maxOrderTask ? maxOrderTask.order + 1 : 0;
+      }
+
       // Create the task
       const createdTask = new this.taskModel(createTaskDto);
       await createdTask.save({ session });
